@@ -5,10 +5,10 @@ class Lexer:
     def __init__(self):
         # 定義 Token 類型 dict型別(用於特殊符號)
         self.reserved = {
-            'id':'ID',
+            'id': 'ID',
             'if': 'IF',
             'else': 'ELSE',
-            'equal':'EQUAL'
+            'equal': 'EQUAL'
         }
         self.tokens = (
             'NUMBER',  # 數字
@@ -19,7 +19,7 @@ class Lexer:
             'LPAREN',  # (
             'RPAREN',  # )
             'DIVISIBILITY',  # //
-        ) + tuple(self.reserved.values()) # 轉換成tuple
+        ) + tuple(self.reserved.values())  # 轉換成tuple
 
         # 定義 Token 規則（t_ 開頭）
         self.t_PLUS = r'\+'
@@ -53,19 +53,25 @@ class Lexer:
         r'[a-zA-Z_][a-zA-Z0-9_]*'
         t.type = self.reserved.get(t.value, 'ID')
         return t
-    def t_EQUAL(self,t):
+
+    def t_newline(self, t):
+        r'\n+'
+        t.lexer.lineno += len(t.value)
+
+    def t_EQUAL(self, t):
         r'='
-        t.value = self.reserved.get(t.value,'EQUAL')
+        t.value = self.reserved.get(t.value, 'EQUAL')
         return t
+
     # 取得 Token
     def token(self):
         return self.lexer.token()
 
 
-# 測試 Lexer
+# test Lexer
 if __name__ == "__main__":
     lexer = Lexer()
-    data = "x=1+2"
+    data = "x=1+2*3"
     lexer.input(data)
     while True:
         token = lexer.token()
