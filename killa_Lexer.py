@@ -19,6 +19,7 @@ class Lexer:
             'LPAREN',  # (
             'RPAREN',  # )
             'DIVISIBILITY',  # //
+            'PLUSPLUS', # ++
         ) + tuple(self.reserved.values())  # 轉換成tuple
 
         # 定義 Token 規則（t_ 開頭）
@@ -29,6 +30,7 @@ class Lexer:
         self.t_LPAREN = r'\('
         self.t_RPAREN = r'\)'
         self.t_DIVISIBILITY = r'//'
+        self.t_PLUSPLUS = r'\++'
         # 忽略空格
         self.t_ignore = ' \t'
         # 建立 Lexer
@@ -62,7 +64,6 @@ class Lexer:
         r'='
         t.value = self.reserved.get(t.value, 'EQUAL')
         return t
-
     # 取得 Token
     def token(self):
         return self.lexer.token()
@@ -71,7 +72,7 @@ class Lexer:
 # test Lexer
 if __name__ == "__main__":
     lexer = Lexer()
-    data = "x=1+2*3"
+    data = "1+1"
     lexer.input(data)
     while True:
         token = lexer.token()
