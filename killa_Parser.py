@@ -1,116 +1,130 @@
 import ply.yacc as yacc
-from killa_Lexer import Lexer  # 你的 Lexer 應該要定義 `tokens`
+from killa_Lexer import Lexer
 
-lexer = Lexer()  # 初始化 Lexer
-tokens = lexer.tokens  # 取得 tokens
-variables = {}  # 用來存放變數的字典
+variables = {}
 
 
-# 表達式或賦值
-def p_statement(p):
-    '''statement : assignment
-                | expression'''
-    p[0] = p[1]
+# ----------- 表達式 -----------
+def p_expression_number(p):
+    'expression : NUMBER'
+    p[0] = lambda: p[1]
 
 
-# 加法
-def p_expression_plus(p):
-    'expression : expression PLUS term'
-    p[0] = p[1] + p[3]
+def p_expression_var(p):
+    'expression : ID'
+    p[0] = lambda: variables.get(p[1], 0)
 
 
-# 減法
-def p_expression_minus(p):
-    'expression : expression MINUS term'
-    p[0] = p[1] - p[3]
+def p_expression_binop(p):
+    '''expression : expression PLUS expression
+                  | expression MINUS expression
+                  | expression TIMES expression
+                  | expression DIVISION expression
+                  | expression LT expression
+                  | expression GT expression'''
+    left = p[1]
+    right = p[3]
+    if p[2] == '+':
+        p[0] = lambda: left() + right()
+    elif p[2] == '-':
+        p[0] = lambda: left() - right()
+    elif p[2] == '*':
+        p[0] = lambda: left() * right()
+    elif p[2] == '/':
+        p[0] = lambda: left() / right()
+    elif p[2] == '<':
+        p[0] = lambda: left() < right()
+    elif p[2] == '>':
+        p[0] = lambda: left() > right()
 
 
-def p_expression_term(p):
-    'expression : term'
-    p[0] = p[1]
-
-
-# 乘法
-def p_term_times(p):
-    'term : term TIMES factor'
-    p[0] = p[1] * p[3]
-
-
-# 除法
-def p_term_div(p):
-    'term : term DIVISION factor'
-    p[0] = p[1] / p[3]
-
-
-def p_term_factor(p):
-    'term : factor'
-    p[0] = p[1]
-
-
-# 數字
-def p_factor_num(p):
-    'factor : NUMBER'
-    p[0] = p[1]
-
-
-# 括號
-def p_factor_expr(p):
-    'factor : LPAREN expression RPAREN'
+def p_expression_paren(p):
+    'expression : LPAREN expression RPAREN'
     p[0] = p[2]
 
 
-# 處理變數 ID
-def p_factor_id(p):
-    'factor : ID'
-    p[0] = variables.get(p[1], 0)  # 取得變數值，若不存在則預設為 0
+# ----------- 賦值 -----------
+def p_statement_assign(p):
+    'statement : VAR ID EQUAL expression'
+    expr = p[3]
+    p[0] = lambda: variables.__setitem__(p[1], expr())
 
 
-# 賦值語法
-def p_assignment_assign(p):
-    'assignment : VAR ID EQUAL expression'
-    variables[p[1]] = p[3]
-    p[0] = p[3]
-
-
-# if-else statement
-def p_statement_if(p):
-    'statement : IF LPAREN expression RPAREN statement ELSE statement'
-    if p[3]:  # 如果條件為 True，執行 if 區塊
-        p[0] = p[5]
-    else:  # 否則執行 else 區塊
-        p[0] = p[7]
-
-
-# 整數除法
-def p_term_divisibility(p):
-    'term : term DIVISIBILITY factor'
-    p[0] = p[1] // p[3]
-
-
-def p_term_dot(p):
-    'term : term dot factor'
-    p[0] = p[1] + p[3]
-
-
+# ----------- print -----------
 def p_statement_print(p):
     'statement : PRINT LPAREN expression RPAREN'
-    print(p[3])
-    p[0] = p[3]
+    expr = p[3]
+    p[0] = lambda: print(expr())
 
 
-# Error code
+# ----------- while -----------
+def p_statement_while(p):
+    'statement : WHILE LPAREN expression RPAREN statement'
+    cond = p[3]
+    body = p[5]
+
+    def loop():
+        while cond():
+            body()
+
+    p[0] = loop
+
+
+# ----------- if-else -----------
+def p_statement_if(p):
+    'statement : IF LPAREN expression RPAREN statement ELSE statement'
+    cond = p[3]
+    body_if = p[5]
+    body_else = p[7]
+
+    def branch():
+        if cond():
+            body_if()
+        else:
+            body_else()
+
+    p[0] = branch
+
+
+# ----------- statement block 或 單一 statement -----------
+def p_statement_group(p):
+    'statement : statement COLON statement'
+    stmt = p[1]  # 冒號後是接著的語句
+    p[0] = stmt
+
+
+def p_statement_single(p):
+    'statement : expression'
+    expr = p[1]
+    p[0] = lambda: expr()
+
+
 def p_error(p):
-    print(f"Syntax Error: {p.value}")
+    print('Syntax Error')
 
 
-def p_assignment_error(p):
-    'assignment : ID EQUAL expression'
-    print("Syntax Error: Use 'var' to declare variables.")
-    p[0] = None
+# 大於等於
+def p_expression_ge(p):
+    'expression : expression GE expression'
+    p[0] = p[1] >= p[3]
+
+
+# 小於等於
+def p_expression_le(p):
+    'expression : expression LE expression'
+    p[0] = p[1] <= p[3]
+
+
+# IN 用於檢查是否在範圍內
+def p_expression_in(p):
+    'expression : expression IN LPAREN expression RPAREN'
+    p[0] = p[1] in p[4]  # 假設 p[4] 是一個列表或範圍
 
 
 # build Parser
-parser = yacc.yacc()
+lexer = Lexer()
+tokens = lexer.tokens
+parser = yacc.yacc(start='statement')
 
 # read input
 if __name__ == "__main__":

@@ -5,15 +5,9 @@ class Lexer:
     def __init__(self):
         # 定義 Token 類型 dict型別(用於特殊符號)
         self.reserved = {
-            'id': 'ID',
-            'for': 'FOR',
-            'while': 'WHILE',
-            'if': 'IF',
-            'else': 'ELSE',
-            'brk': 'BREAK',
-            'in': 'IN',
-            'range': 'RANGE',
-            'prt': 'PRINT',
+            'id': 'ID', 'for': 'FOR', 'while': 'WHILE',
+            'if': 'IF', 'else': 'ELSE', 'brk': 'BREAK',
+            'in': 'IN', 'range': 'RANGE', 'prt': 'PRINT',
             'ret': 'RETURN',
             'switch': 'SWITCH',
             'case': 'CASE',
@@ -23,10 +17,10 @@ class Lexer:
         }
         self.tokens = (
             'NUMBER',  # 數字
-            'GREATER_THEN_EQUAL',  # >=
-            'GREATER_THEN',  # >
-            'LESS_THEN_EQUAL',  # <
-            'LESS_THEN',  # <=
+            'GE',  # >=
+            'GT',  # >
+            'LT',  # <
+            'LE',  # <=
             'PLUSPLUS',  # ++
             'PLUS',  # +
             'MINUS',  # -
@@ -37,6 +31,7 @@ class Lexer:
             'DIVISIBILITY',  # //
             'EQUAL',  # =
             'dot', # ,
+            'COLON'
         ) + tuple(self.reserved.values())  # 轉換成tuple
 
         # 定義 Token 規則（t_ 開頭）
@@ -49,11 +44,12 @@ class Lexer:
         self.t_DIVISIBILITY = r'\/\/'
         self.t_EQUAL = r'='
         self.t_PLUSPLUS = r'\+\+'
-        self.t_GREATER_THEN_EQUAL = r'>='
-        self.t_GREATER_THEN = r'>'
-        self.t_LESS_THEN_EQUAL = r'<='
-        self.t_LESS_THEN = r'<'
+        self.t_GE = r'>='
+        self.t_GT = r'>'
+        self.t_LE = r'<='
+        self.t_LT = r'<'
         self.t_dot = r','
+        self.t_COLON = r':'
         # 忽略空格
         self.t_ignore = ' \t'
         # 建立 Lexer
@@ -91,8 +87,8 @@ class Lexer:
 # test Lexer
 if __name__ == "__main__":
     lexer = Lexer()
-    data = ("var x,"
-            "var y = 10,")
+    data = ("x>=2"
+            "\n")
     lexer.input(data)
     while True:
         token = lexer.token()
