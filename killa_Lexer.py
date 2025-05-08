@@ -3,7 +3,7 @@ import ply.lex as lex
 
 class Lexer:
     def __init__(self):
-        # 定義 Token 類型 dict型別(用於特殊符號)
+        # 定義 Token 類型 dict型別(用於保留字)
         self.reserved = {
             'id': 'ID', 'for': 'FOR', 'while': 'WHILE',
             'if': 'IF', 'else': 'ELSE', 'brk': 'BREAK',
@@ -30,8 +30,11 @@ class Lexer:
             'RPAREN',  # )
             'DIVISIBILITY',  # //
             'EQUAL',  # =
-            'dot', # ,
-            'COLON'
+            'EQUAL_EQUAL',  # ==
+            'NOTEQUAL',  # !=
+            'dot',  # ,
+            'SEMI',  # ;
+            'COLON'  # :
         ) + tuple(self.reserved.values())  # 轉換成tuple
 
         # 定義 Token 規則（t_ 開頭）
@@ -48,7 +51,10 @@ class Lexer:
         self.t_GT = r'>'
         self.t_LE = r'<='
         self.t_LT = r'<'
+        self.t_EQUAL_EQUAL = r'=='
+        self.t_NOTEQUAL = r'!='
         self.t_dot = r','
+        self.t_SEMI = r';'
         self.t_COLON = r':'
         # 忽略空格
         self.t_ignore = ' \t'
@@ -87,8 +93,8 @@ class Lexer:
 # test Lexer
 if __name__ == "__main__":
     lexer = Lexer()
-    data = ("x>=2"
-            "\n")
+    data = (""
+            "x = x - 1")
     lexer.input(data)
     while True:
         token = lexer.token()
