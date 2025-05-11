@@ -34,7 +34,7 @@ pip install ply
     x = 10
     y = x * 2
     if y > 15:
-        prit("y is large")
+        prt("y is large")
   ```
 ### **2.支援基本函數**
 - 支援簡單的函數
@@ -42,7 +42,7 @@ pip install ply
   ```txt
   func square(n):
     ret n * n
-  prit(square(5));  // 輸出 25
+  prt(square(5));  // 輸出 25
   ```
 
 ## 如何安裝及使用
