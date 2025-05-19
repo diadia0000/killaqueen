@@ -2,3 +2,4 @@
 .idea/
 parsetab.py
 *.out
+test.*

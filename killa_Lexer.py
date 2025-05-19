@@ -21,7 +21,6 @@ class Lexer:
             'GT',  # >
             'LT',  # <
             'LE',  # <=
-            'PLUSPLUS',  # ++
             'PLUS',  # +
             'MINUS',  # -
             'TIMES',  # *
@@ -46,7 +45,6 @@ class Lexer:
         self.t_RPAREN = r'\)'
         self.t_DIVISIBILITY = r'\/\/'
         self.t_EQUAL = r'='
-        self.t_PLUSPLUS = r'\+\+'
         self.t_GE = r'>='
         self.t_GT = r'>'
         self.t_LE = r'<='
