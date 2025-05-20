@@ -17,6 +17,7 @@ class Lexer:
         }
         self.tokens = (
             'NUMBER',  # 數字
+            'STRING',
             'GE',  # >=
             'GT',  # >
             'LT',  # <
@@ -63,6 +64,11 @@ class Lexer:
     def t_NUMBER(self, t):
         r'\d+'
         t.value = int(t.value)  # 轉換為整數
+        return t
+
+    def t_STRING(self, t):
+        r'(\"([^\\\n]|(\\.))*?\"|\'([^\\\n]|(\\.))*?\')'  # 支援雙引號字串，例如 "hello"
+        t.value = t.value[1:-1]  # 移除引號
         return t
 
     # 錯誤處理

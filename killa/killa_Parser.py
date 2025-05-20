@@ -60,6 +60,10 @@ def p_expression_number(p):
 
     p[0] = expr  # Return a function that returns the value
 
+def p_expression_string(p):
+    "expression : STRING"
+    p[0] = p[1]
+
 
 def p_expression_var(p):
     'expression : ID'
@@ -122,6 +126,15 @@ def p_statement_reassign(p):
 
 
 def evaluate_expression(expr):
+    if isinstance(expr, tuple) and len(expr) == 3:
+        left = evaluate_expression(expr[0])
+        op = expr[1]
+        right = evaluate_expression(expr[2])
+
+        if op == '+':
+            if isinstance(left, str) or isinstance(right, str):
+                return str(left) + str(right)
+            return left + right
     if callable(expr):
         return expr()
     return expr
@@ -250,11 +263,11 @@ def p_statement_semi(p):
 
 # ----------- if-else -----------
 def p_statement_if(p):
-    """statement : IF LPAREN expression RPAREN statements
-                | IF LPAREN expression RPAREN COLON statements ELSE COLON statements"""
-    if len(p) == 6:  # if without else
-        cond = p[3]
-        true_stmt = p[5]
+    """statement : IF expression COLON statements
+                 | IF expression COLON statements ELSE COLON statements"""
+    if len(p) == 5:
+        cond = p[2]
+        true_stmt = p[4]
 
         def stmt():
             if evaluate_expression(cond):
@@ -262,10 +275,10 @@ def p_statement_if(p):
             return None
 
         p[0] = stmt
-    else:  # if with else
-        cond = p[3]
-        true_stmt = p[6]
-        false_stmt = p[9]
+    else:
+        cond = p[2]
+        true_stmt = p[4]
+        false_stmt = p[7]
 
         def stmt():
             if evaluate_expression(cond):
@@ -274,6 +287,7 @@ def p_statement_if(p):
                 return false_stmt() if callable(false_stmt) else false_stmt()
 
         p[0] = stmt
+
 
 
 # ----------- IN 表達式 -----------
@@ -323,7 +337,6 @@ def p_error(p):
         print(f"Position: {p.lexpos}")
     else:
         print("Syntax Error at EOF")
-    breakpoint()
     return
 
 
@@ -331,7 +344,6 @@ def p_error(p):
 def p_expression_error(p):
     '''expression : error'''
     print(f"Expression error at {p}")
-    breakpoint()
     return
 
 
