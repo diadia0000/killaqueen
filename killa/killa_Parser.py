@@ -3,6 +3,12 @@ from .killa_Lexer import Lexer
 import sys
 
 variables = {}
+functions = {}
+
+
+class ReturnException(Exception):
+    def __init__(self, value):
+        self.value = value
 
 
 def p_program(p):
@@ -44,7 +50,7 @@ def p_statement_expr(p):
                 #print(f"DEBUG [STMT_EXPR]: Non-callable value {val}")  # Debug print
                 return val
         except Exception as e:
-            raise f"Error evaluating expression: {e}"
+            raise Exception(f"Error evaluating expression: {e}")
 
     p[0] = stmt
 
@@ -59,6 +65,7 @@ def p_expression_number(p):
         return val
 
     p[0] = expr  # Return a function that returns the value
+
 
 def p_expression_string(p):
     "expression : STRING"
@@ -234,18 +241,6 @@ def p_statements_single(p):
     p[0] = p[1]
 
 
-def p_statements_seq(p):
-    'statements : statements statement'
-    prev = p[1]
-    stmt = p[2]
-
-    def exec_block():
-        evaluate_expression(prev)
-        return evaluate_expression(stmt)
-
-    p[0] = exec_block
-
-
 # 支援分號（;）語句分隔符號
 def p_statement_semi(p):
     'statement : statement SEMI statement'
@@ -289,7 +284,6 @@ def p_statement_if(p):
         p[0] = stmt
 
 
-
 # ----------- IN 表達式 -----------
 def p_expression_in(p):
     left = p[1]
@@ -323,6 +317,48 @@ def p_statement_for(p):
 
     p[0] = loop
 
+
+def p_statement_func(p):
+    '''statement : FUNC ID LPAREN RPAREN COLON statements'''
+    func_name = p[2]
+    body = p[6]
+
+    def func_body():
+        try:
+            body()
+            return None  # Default return if no explicit return statement
+        except ReturnException as e:
+            return e.value  # Handle explicit returns
+
+    functions[func_name] = func_body
+    p[0] = None
+
+
+def p_expression_func_call(p):
+    '''expression : ID LPAREN RPAREN'''
+    func_name = p[1]
+
+    def call():
+        if func_name not in functions:
+            raise Exception(f"Function '{func_name}' is not defined")
+        try:
+            result = functions[func_name]()
+            return result
+        except ReturnException as e:
+            return e.value  # Properly handle the return value
+
+    p[0] = call
+
+
+def p_statement_return(p):
+    '''statement : RETURN expression'''
+    ret_val = p[2]
+
+    def ret_stmt():
+        value = evaluate_expression(ret_val)  # Evaluate the return expression
+        raise ReturnException(value)
+
+    p[0] = ret_stmt
 
 
 # ----------- 錯誤處理 -----------
@@ -366,7 +402,7 @@ def run(code: str):
             # print(f"DEBUG [RUN]: Program executed, final result = {result}")
             return result
         except Exception as e:
-            raise f"Runtime error: {e}"
+            raise Exception(f"Runtime error: {e}")
     return ast
 
 

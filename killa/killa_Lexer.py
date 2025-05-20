@@ -107,7 +107,8 @@ if __name__ == "__main__":
     lexer = Lexer()
     data = (""
             "x = x - 1"
-            "# 100")
+            "func a(): ret 100"
+            )
     lexer.input(data)
     while True:
         token = lexer.token()
