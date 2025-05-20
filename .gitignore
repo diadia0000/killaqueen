@@ -3,3 +3,4 @@
 parsetab.py
 *.out
 test.*
+.venv
