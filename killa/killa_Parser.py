@@ -307,23 +307,22 @@ def p_expression_in(p):
 
 # for 變數 in 範圍_start: _end:
 def p_statement_for(p):
-    'statement : FOR ID IN RANGE LPAREN expression dot expression RPAREN COLON statements'
+    'statement : FOR ID IN RANGE LPAREN expression DOT expression RPAREN COLON statement'
     varname = p[2]
-    start_expr = p[4]
-    end_expr = p[6]
-    body = p[8]
+    start_expr = p[6]
+    end_expr = p[8]
+    body = p[11]
 
     def loop():
         start = evaluate_expression(start_expr)
         end = evaluate_expression(end_expr)
-        #print(f"DEBUG [FOR]: Looping {varname} from {start} to {end - 1}")
         for i in range(start, end):
             variables[varname] = i
-            #print(f"DEBUG [FOR]: {varname} = {i}")
             evaluate_expression(body)
         return None
 
     p[0] = loop
+
 
 
 # ----------- 錯誤處理 -----------
@@ -337,6 +336,7 @@ def p_error(p):
         print(f"Position: {p.lexpos}")
     else:
         print("Syntax Error at EOF")
+        breakpoint()
     return
 
 
@@ -344,6 +344,7 @@ def p_error(p):
 def p_expression_error(p):
     '''expression : error'''
     print(f"Expression error at {p}")
+    breakpoint()
     return
 
 
