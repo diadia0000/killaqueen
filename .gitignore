@@ -4,3 +4,4 @@ parsetab.py
 *.out
 test.*
 .venv
+killa/__pycache__

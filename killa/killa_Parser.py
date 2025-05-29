@@ -11,6 +11,20 @@ class ReturnException(Exception):
         self.value = value
 
 
+class Function:
+    def __init__(self, name, statements):
+        self.name = name
+        self.statements = statements  # list of statement callable
+
+    def call(self):
+        try:
+            for stmt in self.statements:
+                stmt()
+            return None  # 沒 ret 就回 None
+        except ReturnException as e:
+            return e.value
+
+
 def p_program(p):
     '''program : statement
                | program statement'''
@@ -44,10 +58,10 @@ def p_statement_expr(p):
         try:
             if callable(val):
                 result = val()
-                #print(f"DEBUG [STMT_EXPR]: Called expression, got {result}")  # Debug print
+                # print(f"DEBUG [STMT_EXPR]: Called expression, got {result}")  # Debug print
                 return result
             else:
-                #print(f"DEBUG [STMT_EXPR]: Non-callable value {val}")  # Debug print
+                # print(f"DEBUG [STMT_EXPR]: Non-callable value {val}")  # Debug print
                 return val
         except Exception as e:
             raise Exception(f"Error evaluating expression: {e}")
@@ -59,7 +73,7 @@ def p_expression_number(p):
     'expression : NUMBER'
     val = p[1]
 
-    #print(f"DEBUG [NUMBER]: Creating number expression with value {val}")  # Debug print
+    # print(f"DEBUG [NUMBER]: Creating number expression with value {val}")  # Debug print
 
     def expr():
         return val
@@ -69,7 +83,12 @@ def p_expression_number(p):
 
 def p_expression_string(p):
     "expression : STRING"
-    p[0] = p[1]
+    val = p[1]
+
+    def expr():
+        return val
+
+    p[0] = expr
 
 
 def p_expression_var(p):
@@ -79,7 +98,7 @@ def p_expression_var(p):
     def expr():
         if var_name in variables:
             val = variables[var_name]
-            #print(f"DEBUG [VAR] Retrieved value {val} for {var_name}")
+            # print(f"DEBUG [VAR] Retrieved value {val} for {var_name}")
             return val
         else:
             raise NameError(f"Variable '{var_name}' not declared")
@@ -98,13 +117,13 @@ def p_statement_assign(p):
 
     def stmt():
         try:
-            #print(f"DEBUG [ASSIGN] Starting assignment for {var_name}")  # New debug
-            #print(f"DEBUG [ASSIGN] Expression is {expr}")  # New debug
+            # print(f"DEBUG [ASSIGN] Starting assignment for {var_name}")  # New debug
+            # print(f"DEBUG [ASSIGN] Expression is {expr}")  # New debug
             val = expr() if callable(expr) else expr
-            #print(f"DEBUG [ASSIGN] Evaluated value is {val}")  # New debug
+            # print(f"DEBUG [ASSIGN] Evaluated value is {val}")  # New debug
             if var_name:
                 variables[var_name] = val
-                #print(f"DEBUG [ASSIGN] Variables after assignment: {variables}")  # New debug
+                # print(f"DEBUG [ASSIGN] Variables after assignment: {variables}")  # New debug
             return val
         except Exception as e:
             print(f"Error in assignment: {e}")
@@ -123,9 +142,9 @@ def p_statement_reassign(p):
         val = expr() if callable(expr) else expr
         if var_name in variables:
             variables[var_name] = val
-            #print(f"DEBUG [REASSIGN] {var_name} updated to {val}")
+            # print(f"DEBUG [REASSIGN] {var_name} updated to {val}")
         else:
-            #print(f"WARNING: Variable '{var_name}' not declared, auto-declaring.")
+            # print(f"WARNING: Variable '{var_name}' not declared, auto-declaring.")
             variables[var_name] = val
         return val
 
@@ -133,6 +152,7 @@ def p_statement_reassign(p):
 
 
 def evaluate_expression(expr):
+    # 如果是三元 tuple（類似 AST 節點），例如 (left, op, right)
     if isinstance(expr, tuple) and len(expr) == 3:
         left = evaluate_expression(expr[0])
         op = expr[1]
@@ -142,8 +162,19 @@ def evaluate_expression(expr):
             if isinstance(left, str) or isinstance(right, str):
                 return str(left) + str(right)
             return left + right
+
+    # 如果是函式（通常是變數或更複雜表達式的延遲求值函式）
     if callable(expr):
         return expr()
+
+    # 這裡新增：如果是字串，當成變數名去查表
+    if isinstance(expr, str):
+        if expr in variables:
+            return variables[expr]
+        else:
+            raise Exception(f"Undefined variable '{expr}'")
+
+    # 其他情況就直接回傳
     return expr
 
 
@@ -191,7 +222,7 @@ def p_expression_binop(p):
             result = l_val != r_val
         else:
             raise RuntimeError(f"Unknown operator {op}")
-        #print(f"DEBUG [BINOP]: {l_val} {op} {r_val} = {result}")
+        # print(f"DEBUG [BINOP]: {l_val} {op} {r_val} = {result}")
         return result
 
     p[0] = expr
@@ -203,13 +234,13 @@ def p_expression_paren(p):
 
 
 # ----------- print -----------
-def p_statement_print(p):
+def p_statement_prt(p):
     'statement : PRINT LPAREN expression RPAREN SEMI'
     expr = p[3]
 
     def stmt():
         val = evaluate_expression(expr)
-        #print(f"DEBUG [PRINT]: About to print value {val}")
+        # print(f"DEBUG [PRINT]: About to print value {val}")
         print(val)
         return val
 
@@ -221,24 +252,31 @@ def p_statement_print(p):
 def p_statement_while(p):
     'statement : WHILE LPAREN expression RPAREN COLON statements'
     expr = p[3]
-    block = p[6]
+    block = p[6]  # 這是 list
 
     def stmt():
         iteration = 0
         while True:
             cond_val = evaluate_expression(expr)
-            #print(f"DEBUG [WHILE] iteration {iteration}, condition value: {cond_val}")
+            print(f"DEBUG [WHILE] iteration {iteration}, condition value: {cond_val}")
             if not cond_val:
                 break
-            evaluate_expression(block)
+            for s in block:
+                if callable(s):
+                    s()
             iteration += 1
 
     p[0] = stmt
 
 
+def p_statements_multiple(p):
+    'statements : statements statement'
+    p[0] = p[1] + [p[2]]  # List of statement functions
+
+
 def p_statements_single(p):
     'statements : statement'
-    p[0] = p[1]
+    p[0] = [p[1]]
 
 
 # 支援分號（;）語句分隔符號
@@ -286,6 +324,7 @@ def p_statement_if(p):
 
 # ----------- IN 表達式 -----------
 def p_expression_in(p):
+    'expression : expression IN expression'
     left = p[1]
     container = p[4]
 
@@ -293,7 +332,7 @@ def p_expression_in(p):
         l_val = left() if callable(left) else left
         c_val = container() if callable(container) else container
         result = l_val in c_val
-        #print(f"DEBUG [IN]: {l_val} in {c_val} = {result}")
+        print(f"DEBUG [IN]: {l_val} in {c_val} = {result}")
         return result
 
     p[0] = expr
@@ -305,14 +344,15 @@ def p_statement_for(p):
     varname = p[2]
     start_expr = p[6]
     end_expr = p[8]
-    body = p[11]
+    body = p[11]  # 這裡是 statement (函式)
 
     def loop():
         start = evaluate_expression(start_expr)
         end = evaluate_expression(end_expr)
         for i in range(start, end):
             variables[varname] = i
-            evaluate_expression(body)
+            if callable(body):
+                body()
         return None
 
     p[0] = loop
@@ -321,17 +361,12 @@ def p_statement_for(p):
 def p_statement_func(p):
     '''statement : FUNC ID LPAREN RPAREN COLON statements'''
     func_name = p[2]
-    body = p[6]
+    body = p[6]  # statements 是 list of callable
 
-    def func_body():
-        try:
-            body()
-            return None  # Default return if no explicit return statement
-        except ReturnException as e:
-            return e.value  # Handle explicit returns
+    func_obj = Function(func_name, body)
+    functions[func_name] = func_obj
 
-    functions[func_name] = func_body
-    p[0] = None
+    p[0] = None  # 定義函式本身不會產生執行動作
 
 
 def p_expression_func_call(p):
@@ -341,22 +376,18 @@ def p_expression_func_call(p):
     def call():
         if func_name not in functions:
             raise Exception(f"Function '{func_name}' is not defined")
-        try:
-            result = functions[func_name]()
-            return result
-        except ReturnException as e:
-            return e.value  # Properly handle the return value
+        return functions[func_name].call()
 
     p[0] = call
 
 
-def p_statement_return(p):
-    '''statement : RETURN expression'''
-    ret_val = p[2]
+def p_statement_ret(p):
+    '''statement : RETURN expression SEMI'''
+    expr_func = p[2]  # 取得可呼叫的 expression 函式
 
     def ret_stmt():
-        value = evaluate_expression(ret_val)  # Evaluate the return expression
-        raise ReturnException(value)
+        value = expr_func()  # 呼叫 expression 函式以取得值
+        raise ReturnException(value)  # 拋出 return 例外帶回值
 
     p[0] = ret_stmt
 

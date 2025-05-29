@@ -1,9 +1,9 @@
 import killa
 
 code = """
-func foo():
-    ret 42;
-var x = foo();
+func hello():
+    ret 100;
+var x = hello();
 prt(x);
 """
 
