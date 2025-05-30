@@ -1,117 +1,96 @@
-import ply.lex as lex
+# killa_Lexer.py — 使用 re 的 Lexer（完全取代 PLY）
+
+import re
+from collections import namedtuple
+
+Token = namedtuple('Token', ['type', 'value', 'lineno', 'lexpos'])
 
 
 class Lexer:
     def __init__(self):
-        # 定義 Token 類型 dict型別(用於保留字)
+        self.lineno = 1
+        self.pos = 0
+        self.text = ''
         self.reserved = {
             'id': 'ID', 'for': 'FOR', 'while': 'WHILE',
             'if': 'IF', 'else': 'ELSE', 'brk': 'BREAK',
             'in': 'IN', 'range': 'RANGE', 'prt': 'PRINT',
-            'ret': 'RETURN',
-            'switch': 'SWITCH',
-            'case': 'CASE',
-            'default': 'DEFAULT',
-            'var': 'VAR',
-            'func': 'FUNC',
+            'ret': 'RETURN', 'switch': 'SWITCH',
+            'case': 'CASE', 'default': 'DEFAULT',
+            'var': 'VAR', 'func': 'FUNC',
         }
-        self.tokens = (
-            'NUMBER',  # 數字
-            'STRING',
-            'GE',  # >=
-            'GT',  # >
-            'LT',  # <
-            'LE',  # <=
-            'PLUS',  # +
-            'MINUS',  # -
-            'TIMES',  # *
-            'DIVISION',  # /
-            'LPAREN',  # (
-            'RPAREN',  # )
-            'DIVISIBILITY',  # //
-            'EQUAL',  # =
-            'EQUAL_EQUAL',  # ==
-            'NOTEQUAL',  # !=
-            'DOT',  # ,
-            'SEMI',  # ;
-            'COLON',  # :
-            'COMMENT' # 註解#
-        ) + tuple(self.reserved.values())  # 轉換成tuple
 
-        # 定義 Token 規則（t_ 開頭）
-        self.t_PLUS = r'\+'
-        self.t_MINUS = r'\-'
-        self.t_TIMES = r'\*'
-        self.t_DIVISION = r'/'
-        self.t_LPAREN = r'\('
-        self.t_RPAREN = r'\)'
-        self.t_DIVISIBILITY = r'\/\/'
-        self.t_EQUAL = r'='
-        self.t_GE = r'>='
-        self.t_GT = r'>'
-        self.t_LE = r'<='
-        self.t_LT = r'<'
-        self.t_EQUAL_EQUAL = r'=='
-        self.t_NOTEQUAL = r'!='
-        self.t_DOT = r','
-        self.t_SEMI = r';'
-        self.t_COLON = r':'
-        # 忽略空格
-        self.t_ignore = ' \t'
-        # 建立 Lexer
-        self.lexer = lex.lex(module=self)
+        self.token_spec = [
+            ('NUMBER', r'\d+'),
+            ('STRING', r'(\"([^\\\n]|(\\.))*?\"|\'([^\\\n]|(\\.))*?\')'),
+            ('GE', r'>='),
+            ('LE', r'<='),
+            ('EQUAL_EQUAL', r'=='),
+            ('NOTEQUAL', r'!='),
+            ('GT', r'>'),
+            ('LT', r'<'),
+            ('PLUS', r'\+'),
+            ('MINUS', r'-'),
+            ('TIMES', r'\*'),
+            ('DIVISIBILITY', r'\/\/'),
+            ('DIVISION', r'/'),
+            ('EQUAL', r'='),
+            ('LPAREN', r'\('),
+            ('RPAREN', r'\)'),
+            ('DOT', r','),
+            ('SEMI', r';'),
+            ('COLON', r':'),
+            ('ID', r'[a-zA-Z_][a-zA-Z0-9_]*'),
+            ('COMMENT', r'\#.*'),
+            ('NEWLINE', r'\n'),
+            ('SKIP', r'[ \t]+'),
+            ('MISMATCH', r'.'),
+        ]
 
-    # 定義數字（需要處理數值轉換）
-    def t_NUMBER(self, t):
-        r'\d+'
-        t.value = int(t.value)  # 轉換為整數
-        return t
+        self.token_re = re.compile('|'.join(f'(?P<{name}>{regex})' for name, regex in self.token_spec))
+        self._tokens = []
 
-    def t_STRING(self, t):
-        r'(\"([^\\\n]|(\\.))*?\"|\'([^\\\n]|(\\.))*?\')'  # 支援雙引號字串，例如 "hello"
-        t.value = t.value[1:-1]  # 移除引號
-        return t
+        # 令 parser 可以直接使用的 token 名稱
+        self.tokens = tuple(
+            {name for name, _ in self.token_spec if name not in ('SKIP', 'MISMATCH', 'NEWLINE', 'COMMENT')} | set(
+                self.reserved.values()))
 
-    # 錯誤處理
-    def t_error(self, t):
-        print(f"Error code: {t.value[0]}")
-        t.lexer.skip(1)
+    def build(self):  # 兼容 PLY 的 interface
+        return self
 
-    # 讀取輸入
-    def input(self, data):
-        self.lexer.input(data)
+    def input(self, text):
+        self.text = text
+        self.pos = 0
+        self.lineno = 1
+        self._tokens = list(self._generate_tokens())
 
-    def t_ID(self, t):
-        r'[a-zA-Z_][a-zA-Z0-9_]*'
-        t.type = self.reserved.get(t.value, 'ID')
-        return t
-
-    def t_newline(self, t):
-        r'\n+'
-        t.lexer.lineno += len(t.value)
-
-    def t_COMMENT(self, t):
-        r'\#.*'
-        pass  # 忽略註解，不產生 token
-
-    # 取得 Token
     def token(self):
-        return self.lexer.token()
+        if not self._tokens:
+            return None
+        return self._tokens.pop(0)
 
-    def build(self):
-        self.lexer = lex.lex(module=self)
-        return self.lexer
+    def _generate_tokens(self):
+        while self.pos < len(self.text):
+            match = self.token_re.match(self.text, self.pos)
+            if not match:
+                raise SyntaxError(f"Unknown token at pos {self.pos}")
+            kind = match.lastgroup
+            value = match.group()
+            lexpos = self.pos
+            self.pos = match.end()
 
-# test Lexer
-if __name__ == "__main__":
-    lexer = Lexer()
-    data = (""
-            "x = x - 1"
-            "func a(): ret 100"
-            )
-    lexer.input(data)
-    while True:
-        token = lexer.token()
-        if not token:
-            break
-        print(token)
+            if kind == 'NEWLINE':
+                self.lineno += 1
+                continue
+            elif kind in ('SKIP', 'COMMENT'):
+                continue
+            elif kind == 'ID':
+                kind = self.reserved.get(value, 'ID')
+            elif kind == 'NUMBER':
+                value = int(value)
+            elif kind == 'STRING':
+                value = value[1:-1]
+            elif kind == 'MISMATCH':
+                raise SyntaxError(f"Unexpected character {value} at line {self.lineno}")
+
+            yield Token(kind, value, self.lineno, lexpos)

@@ -1,9 +1,8 @@
-import ply.yacc as yacc
-from .killa_Lexer import Lexer
-import sys
+# killa_Parser.py — 改寫為 class-based 結構，使用 re-based Lexer
 
-variables = {}
-functions = {}
+from .killa_Lexer import Lexer
+from .killa_ast import *
+from .error import KillaSyntaxError, KillaRuntimeError, KillaReturn
 
 
 class ReturnException(Exception):
@@ -12,456 +11,732 @@ class ReturnException(Exception):
 
 
 class Function:
-    def __init__(self, name, statements):
+    def __init__(self, name, params, body_tokens, closure):
         self.name = name
-        self.statements = statements  # list of statement callable
+        self.params = params
+        self.body_tokens = body_tokens
+        self.closure = closure  # the environment where the function was defined
 
-    def call(self):
+    def call(self, interpreter, arguments):
+        env = Environment(self.closure)
+        for i in range(len(self.params)):
+            env.define(self.params[i], arguments[i])
+
+        old_env = interpreter.environment
+        interpreter.environment = env
+
         try:
-            for stmt in self.statements:
-                stmt()
-            return None  # 沒 ret 就回 None
-        except ReturnException as e:
-            return e.value
+            for stmt in self.body_tokens:  # Now these are AST nodes
+                interpreter.execute(stmt)
+        except KillaReturn as r:
+            interpreter.environment = old_env
+            return r.value
 
-
-def p_program(p):
-    '''program : statement
-               | program statement'''
-    if len(p) == 2:
-        stmt = p[1]
-
-        def program():
-            return stmt() if callable(stmt) else stmt
-
-        p[0] = program
-    else:
-        prev_prog = p[1]
-        stmt = p[2]
-
-        def program():
-            if callable(prev_prog):
-                prev_prog()
-            return stmt() if callable(stmt) else stmt
-
-        p[0] = program
-
-
-# ----------- 表達式 -----------
-def p_statement_expr(p):
-    'statement : expression'
-    val = p[1]
-
-    #print(f"DEBUG [STMT_EXPR]: Got expression value {val}")  # Debug print
-
-    def stmt():
-        try:
-            if callable(val):
-                result = val()
-                # print(f"DEBUG [STMT_EXPR]: Called expression, got {result}")  # Debug print
-                return result
-            else:
-                # print(f"DEBUG [STMT_EXPR]: Non-callable value {val}")  # Debug print
-                return val
-        except Exception as e:
-            raise Exception(f"Error evaluating expression: {e}")
-
-    p[0] = stmt
-
-
-def p_expression_number(p):
-    'expression : NUMBER'
-    val = p[1]
-
-    # print(f"DEBUG [NUMBER]: Creating number expression with value {val}")  # Debug print
-
-    def expr():
-        return val
-
-    p[0] = expr  # Return a function that returns the value
-
-
-def p_expression_string(p):
-    "expression : STRING"
-    val = p[1]
-
-    def expr():
-        return val
-
-    p[0] = expr
-
-
-def p_expression_var(p):
-    'expression : ID'
-    var_name = p[1]
-
-    def expr():
-        if var_name in variables:
-            val = variables[var_name]
-            # print(f"DEBUG [VAR] Retrieved value {val} for {var_name}")
-            return val
-        else:
-            raise NameError(f"Variable '{var_name}' not declared")
-
-    p[0] = expr
-
-
-# ----------- 賦值 -----------
-def p_statement_assign(p):
-    'statement : VAR ID EQUAL expression SEMI'
-    if len(p) != 6:
+        interpreter.environment = old_env
         return None
 
-    expr = p[4]
-    var_name = p[2]
 
-    def stmt():
-        try:
-            # print(f"DEBUG [ASSIGN] Starting assignment for {var_name}")  # New debug
-            # print(f"DEBUG [ASSIGN] Expression is {expr}")  # New debug
-            val = expr() if callable(expr) else expr
-            # print(f"DEBUG [ASSIGN] Evaluated value is {val}")  # New debug
-            if var_name:
-                variables[var_name] = val
-                # print(f"DEBUG [ASSIGN] Variables after assignment: {variables}")  # New debug
-            return val
-        except Exception as e:
-            print(f"Error in assignment: {e}")
-            return None
+class Environment:
+    def __init__(self, parent=None):
+        self.values = {}
+        self.parent = parent
 
-    p[0] = stmt
+    def define(self, name, value):
+        if name in self.values:
+            raise KillaRuntimeError(f"Variable '{name}' already declared in this scope.")
+        self.values[name] = value
 
-
-# 支援變數再賦值（例如 x = x - 1）
-def p_statement_reassign(p):
-    'statement : ID EQUAL expression SEMI'
-    var_name = p[1]
-    expr = p[3]
-
-    def stmt():
-        val = expr() if callable(expr) else expr
-        if var_name in variables:
-            variables[var_name] = val
-            # print(f"DEBUG [REASSIGN] {var_name} updated to {val}")
+    def assign(self, name, value):
+        if name in self.values:
+            self.values[name] = value
+        elif self.parent:
+            self.parent.assign(name, value)
         else:
-            # print(f"WARNING: Variable '{var_name}' not declared, auto-declaring.")
-            variables[var_name] = val
-        return val
+            raise KillaRuntimeError(f"Undefined variable '{name}'.")
 
-    p[0] = stmt
-
-
-def evaluate_expression(expr):
-    # 如果是三元 tuple（類似 AST 節點），例如 (left, op, right)
-    if isinstance(expr, tuple) and len(expr) == 3:
-        left = evaluate_expression(expr[0])
-        op = expr[1]
-        right = evaluate_expression(expr[2])
-
-        if op == '+':
-            if isinstance(left, str) or isinstance(right, str):
-                return str(left) + str(right)
-            return left + right
-
-    # 如果是函式（通常是變數或更複雜表達式的延遲求值函式）
-    if callable(expr):
-        return expr()
-
-    # 這裡新增：如果是字串，當成變數名去查表
-    if isinstance(expr, str):
-        if expr in variables:
-            return variables[expr]
+    def get(self, name):
+        if name in self.values:
+            return self.values[name]
+        elif self.parent:
+            return self.parent.get(name)
         else:
-            raise Exception(f"Undefined variable '{expr}'")
+            raise KillaRuntimeError(f"Undefined variable '{name}'.")
 
-    # 其他情況就直接回傳
-    return expr
-
-
-def p_expression_binop(p):
-    '''expression : expression PLUS expression
-                  | expression MINUS expression
-                  | expression TIMES expression
-                  | expression DIVISION expression
-                  | expression LT expression
-                  | expression LE expression
-                  | expression GT expression
-                  | expression GE expression
-                  | expression EQUAL_EQUAL expression
-                  | expression NOTEQUAL expression
-                  | expression DIVISIBILITY expression
-                  '''
-    left = p[1]
-    right = p[3]
-    op = p[2]
-
-    def expr():
-        l_val = left() if callable(left) else left
-        r_val = right() if callable(right) else right
-        if op == '/':
-            if r_val == 0:
-                raise ZeroDivisionError("Division by zero")
-            result = l_val / r_val
-        elif op == '-':
-            result = l_val - r_val
-        elif op == '+':
-            result = l_val + r_val
-        elif op == '*':
-            result = l_val * r_val
-        elif op == '>':
-            result = l_val > r_val
-        elif op == '<':
-            result = l_val < r_val
-        elif op == '>=':
-            result = l_val >= r_val
-        elif op == '<=':
-            result = l_val <= r_val
-        elif op == '==':
-            result = l_val == r_val
-        elif op == '!=':
-            result = l_val != r_val
-        else:
-            raise RuntimeError(f"Unknown operator {op}")
-        # print(f"DEBUG [BINOP]: {l_val} {op} {r_val} = {result}")
-        return result
-
-    p[0] = expr
+    def exists(self, name):
+        if name in self.values:
+            return True
+        elif self.parent:
+            return self.parent.exists(name)
+        return False
 
 
-def p_expression_paren(p):
-    'expression : LPAREN expression RPAREN'
-    p[0] = p[2]
+class KillaInterpreter:
+    def __init__(self):
+        self._tokens = None
+        self.environment = Environment()
+        self.functions = {}
+        self.lexer = Lexer()
 
+    def evaluate(self, expr):
+        if isinstance(expr, tuple) and len(expr) == 3:
+            left = self.evaluate(expr[0])
+            op = expr[1]
+            right = self.evaluate(expr[2])
+            return self.eval_op(left, op, right)
+        if callable(expr):
+            return expr()
+        if isinstance(expr, str) and expr in self.environment:
+            return self.environment.get(expr)
+        return expr
 
-# ----------- print -----------
-def p_statement_prt(p):
-    'statement : PRINT LPAREN expression RPAREN SEMI'
-    expr = p[3]
+    def eval_op(self, left, op, right):
+        if op == '+': return left + right
+        if op == '-': return left - right
+        if op == '*': return left * right
+        if op == '/': return left / right
+        if op == '//': return left // right
+        if op == '>': return left > right
+        if op == '<': return left < right
+        if op == '>=': return left >= right
+        if op == '<=': return left <= right
+        if op == '==': return left == right
+        if op == '!=': return left != right
+        raise KillaRuntimeError(f"Unknown operator {op}")
 
-    def stmt():
-        val = evaluate_expression(expr)
-        # print(f"DEBUG [PRINT]: About to print value {val}")
-        print(val)
-        return val
-
-    p[0] = stmt
-
-
-# ----------- while -----------
-# 在 while 中執行語句區塊（tuple 的每一個）
-def p_statement_while(p):
-    'statement : WHILE LPAREN expression RPAREN COLON statements'
-    expr = p[3]
-    block = p[6]  # 這是 list
-
-    def stmt():
-        iteration = 0
+    def parse_and_run(self, code):
+        # TEMP: original interpreter path
+        self.lexer.input(code)
         while True:
-            cond_val = evaluate_expression(expr)
-            print(f"DEBUG [WHILE] iteration {iteration}, condition value: {cond_val}")
-            if not cond_val:
+            tok = self.lexer.token()
+            if not tok:
                 break
-            for s in block:
-                if callable(s):
-                    s()
-            iteration += 1
+            # print(f"[TOKEN] {tok.type}: {tok.value}")
 
-    p[0] = stmt
+    def _handle_var_assign(self):
+        id_token = self.lexer.token()
+        eq_token = self.lexer.token()
+        expr_token = self.lexer.token()
+        semi_token = self.lexer.token()
 
+        if id_token.type != 'ID' or eq_token.type != 'EQUAL' or semi_token.type != 'SEMI':
+            raise SyntaxError("Invalid variable assignment syntax")
 
-def p_statements_multiple(p):
-    'statements : statements statement'
-    p[0] = p[1] + [p[2]]  # List of statement functions
+        value = self._evaluate_literal(expr_token)
+        self.environment.define(id_token.value, value)
+        # print(f"[ASSIGN] var {id_token.value} = {value}")
 
+    def _handle_reassign(self, id_token):
+        eq_token = self.lexer.token()
+        left_token = self.lexer.token()
+        op_token = self.lexer.token()
+        right_token = self.lexer.token()
+        semi_token = self.lexer.token()
 
-def p_statements_single(p):
-    'statements : statement'
-    p[0] = [p[1]]
+        if eq_token.type != 'EQUAL' or semi_token.type != 'SEMI':
+            raise KillaSyntaxError("Invalid reassignment syntax")
 
+        # Handle expressions like x = x + 1;
+        if left_token and op_token and right_token:
+            left_val = self._evaluate_literal(left_token)
+            right_val = self._evaluate_literal(right_token)
+            result = self.eval_op(left_val, op_token.value, right_val)
+        else:
+            result = self._evaluate_literal(left_token)
 
-# 支援分號（;）語句分隔符號
-def p_statement_semi(p):
-    'statement : statement SEMI statement'
-    stmt1 = p[1]
-    stmt2 = p[3]
+        self.environment.assign(id_token.value, result)
+        # print(f"[REASSIGN] {id_token.value} = {result}")
 
-    def combined():
-        if callable(stmt1):
-            stmt1()
-        if callable(stmt2):
-            stmt2()
+    def _evaluate_literal(self, token):
+        if token.type == 'NUMBER':
+            return token.value
+        elif token.type == 'STRING':
+            return token.value
+        elif token.type == 'ID':
+            try:
+                return self.environment.get(token.value)
+            except RuntimeError:
+                return 0  # fallback if variable is undefined
+        else:
+            raise SyntaxError(f"Unsupported expression type: {token.type}")
 
-    p[0] = combined  # Note: don't call combined() here
+    def _handle_print(self):
+        expr_token = self.lexer.token()
+        semi_token = self.lexer.token()
 
+        if semi_token.type != 'SEMI':
+            raise SyntaxError("Missing semicolon after print")
 
-# ----------- if-else -----------
-def p_statement_if(p):
-    """statement : IF expression COLON statements
-                 | IF expression COLON statements ELSE COLON statements"""
-    if len(p) == 5:
-        cond = p[2]
-        true_stmt = p[4]
+        value = self._evaluate_literal(expr_token)
+        print(value)
 
-        def stmt():
-            if evaluate_expression(cond):
-                return true_stmt() if callable(true_stmt) else true_stmt()
-            return None
+    def _handle_if(self):
+        # Parse condition like: if x > 5:
+        condition = self._parse_condition()
 
-        p[0] = stmt
-    else:
-        cond = p[2]
-        true_stmt = p[4]
-        false_stmt = p[7]
+        colon_token = self.lexer.token()
+        if colon_token.type != 'COLON':
+            raise SyntaxError("Missing ':' after if condition")
 
-        def stmt():
-            if evaluate_expression(cond):
-                return true_stmt() if callable(true_stmt) else true_stmt()
-            else:
-                return false_stmt() if callable(false_stmt) else false_stmt()
+        if condition:
+            self._run_next_statement()
+            # Check if 'else' follow, and skip it
+            next_tok = self.lexer.token()
+            if next_tok and next_tok.type == 'ELSE':
+                colon = self.lexer.token()
+                if colon.type != 'COLON':
+                    raise SyntaxError("Missing ':' after else")
+                self._skip_next_statement()
+            elif next_tok:
+                self.lexer._tokens.insert(0, next_tok)  # Not else? Put it back.
+        else:
+            # False condition, check for 'else'
+            next_tok = self.lexer._token()
+            if next_tok and next_tok.type == 'ELSE':
+                self._handle_else()
+            elif next_tok:
+                self.lexer._tokens.insert(0, next_tok)
 
-        p[0] = stmt
+    def _handle_else(self):
+        colon = self.lexer._token()
+        if colon.type != 'COLON':
+            raise SyntaxError("Missing ':' after else")
+        self._run_next_statement()
 
+    def _skip_next_statement(self):
+        # Consume one statement’s worth of tokens
+        tok = self.lexer._token()
+        if tok.type in ('VAR', 'PRINT', 'ID', 'IF'):
+            # Consume next few tokens to simulate skipping
+            for _ in range(3):  # crude skip (could be improved)
+                if not self.lexer._token():
+                    break
+        else:
+            raise SyntaxError(f"Unexpected token while skipping: {tok.type}")
 
-# ----------- IN 表達式 -----------
-def p_expression_in(p):
-    'expression : expression IN expression'
-    left = p[1]
-    container = p[4]
+    def _parse_condition(self):
+        left = self.lexer.token()
+        op = self.lexer.token()
+        right = self.lexer.token()
 
-    def expr():
-        l_val = left() if callable(left) else left
-        c_val = container() if callable(container) else container
-        result = l_val in c_val
-        print(f"DEBUG [IN]: {l_val} in {c_val} = {result}")
-        return result
+        if not (left and op and right):
+            raise SyntaxError("Incomplete condition")
 
-    p[0] = expr
+        left_val = self._evaluate_literal(left)
+        right_val = self._evaluate_literal(right)
 
+        return self.eval_op(left_val, op.value, right_val)
 
-# for 變數 in 範圍_start: _end:
-def p_statement_for(p):
-    'statement : FOR ID IN RANGE LPAREN expression DOT expression RPAREN COLON statement'
-    varname = p[2]
-    start_expr = p[6]
-    end_expr = p[8]
-    body = p[11]  # 這裡是 statement (函式)
+    def _run_next_statement(self):
+        tok = self.lexer.token()
+        if tok.type == 'VAR':
+            self._handle_var_assign()
+        elif tok.type == 'ID':
+            self._handle_reassign(tok)
+        elif tok.type == 'PRINT':
+            self._handle_print()
+        elif tok.type == 'IF':
+            self._handle_if()
+        else:
+            raise KillaSyntaxError(f"Unknown statement type in if/else: {tok.type}")
 
-    def loop():
-        start = evaluate_expression(start_expr)
-        end = evaluate_expression(end_expr)
+    def _handle_for(self):
+        var_token = self.lexer.token()  # i
+        in_token = self.lexer.token()
+        range_token = self.lexer.token()
+        start_token = self.lexer.token()
+        end_token = self.lexer.token()
+        colon_token = self.lexer.token()
+
+        if not (var_token.type == 'ID' and in_token.type == 'IN' and
+                range_token.type == 'RANGE' and colon_token.type == 'COLON'):
+            raise KillaSyntaxError("Invalid for loop syntax")
+
+        start = self._evaluate_literal(start_token)
+        end = self._evaluate_literal(end_token)
+
+        # Capture tokens until SEMI (to form 1 complete statement)
+        body_tokens = []
+        while True:
+            tok = self.lexer.token()
+            if tok is None:
+                break
+            body_tokens.append(tok)
+            if tok.type == 'SEMI':
+                break
+
         for i in range(start, end):
-            variables[varname] = i
-            if callable(body):
-                body()
-        return None
+            self.environment.define(var_token.value, i)
+            self.lexer._tokens = body_tokens + self.lexer._tokens
+            self._run_next_statement()
 
-    p[0] = loop
+    def _handle_while(self):
+        # Parse condition: x < 3
+        cond_tokens = [self.lexer.token(), self.lexer.token(), self.lexer.token()]
+        colon_token = self.lexer.token()
+        if colon_token.type != 'COLON':
+            raise KillaSyntaxError("Missing ':' after while condition")
 
+        # Capture body tokens until VAR/FOR/IF/WHILE or EOF
+        body_tokens = []
+        while True:
+            tok = self.lexer.token()
+            if tok is None or tok.type in ('VAR', 'FOR', 'WHILE', 'IF'):
+                if tok:
+                    self.lexer._tokens.insert(0, tok)
+                break
+            body_tokens.append(tok)
 
-def p_statement_func(p):
-    '''statement : FUNC ID LPAREN RPAREN COLON statements'''
-    func_name = p[2]
-    body = p[6]  # statements 是 list of callable
+        while True:
+            # Check condition
+            left_val = self._evaluate_literal(cond_tokens[0])
+            op = cond_tokens[1].value
+            right_val = self._evaluate_literal(cond_tokens[2])
+            if not self.eval_op(left_val, op, right_val):
+                break
 
-    func_obj = Function(func_name, body)
-    functions[func_name] = func_obj
+            # Restore a fresh copy of body tokens
+            self.lexer._tokens = body_tokens.copy() + self.lexer._tokens
 
-    p[0] = None  # 定義函式本身不會產生執行動作
+            # Run all statements in the body
+            remaining = body_tokens.copy()
+            while remaining:
+                self._run_next_statement()
+                # Remove tokens we just processed
+                while remaining:
+                    t = remaining.pop(0)
+                    if t.type == 'SEMI':
+                        break
 
+    def _handle_func_call(self, func_name_token):
+        args = []
 
-def p_expression_func_call(p):
-    '''expression : ID LPAREN RPAREN'''
-    func_name = p[1]
+        # Collect arguments until we hit SEMI
+        while True:
+            tok = self.lexer.token()
+            if tok is None:
+                break
+            if tok.type == 'SEMI':
+                break
+            args.append(self._evaluate_literal(tok))
 
-    def call():
-        if func_name not in functions:
-            raise Exception(f"Function '{func_name}' is not defined")
-        return functions[func_name].call()
+        # Lookup function
+        func = self.environment.get(func_name_token.value)
+        if not isinstance(func, Function):
+            raise RuntimeError(f"'{func_name_token.value}' is not a function")
 
-    p[0] = call
+        # Call the function with evaluated arguments
+        result = func.call(self, args)
+        #print(f"[CALL] {func_name_token.value}({', '.join(str(a) for a in args)})")
+        #if result is not None:
+        #    print(f"[FUNC RETURN] {result}")
 
+    def _handle_func_def(self):
+        name_token = self.lexer.token()
+        params = []
 
-def p_statement_ret(p):
-    '''statement : RETURN expression SEMI'''
-    expr_func = p[2]  # 取得可呼叫的 expression 函式
+        # Collect parameters until ':'
+        while True:
+            tok = self.lexer.token()
+            if tok is None:
+                raise SyntaxError("Unexpected end of input in function definition")
+            if tok.type == 'COLON':
+                break
+            if tok.type == 'ID':
+                params.append(tok.value)
 
-    def ret_stmt():
-        value = expr_func()  # 呼叫 expression 函式以取得值
-        raise ReturnException(value)  # 拋出 return 例外帶回值
+        # Collect body tokens until SEMI
+        body_tokens = []
+        while True:
+            tok = self.lexer.token()
+            if tok is None or tok.type == 'SEMI':
+                break
+            body_tokens.append(tok)
 
-    p[0] = ret_stmt
+        func = Function(name_token.value, params, body_tokens, self.environment)
+        self.environment.define(name_token.value, func)
+        # print(f"[DEFINE] func {name_token.value}({', '.join(params)})")
 
+    def _handle_return(self):
+        if not isinstance(self.environment, Environment):
+            raise SyntaxError("return outside function")
 
-# ----------- 錯誤處理 -----------
-def p_error(p):
-    if p:
-        print(f"Syntax Error at token {p}")
-        # Print the token type and value
-        print(f"Token type: {p.type}")
-        print(f"Token value: {p.value}")
-        print(f"Line number: {p.lineno}")
-        print(f"Position: {p.lexpos}")
-    else:
-        print("Syntax Error at EOF")
-        breakpoint()
-    return
+        expr_token = self.lexer.token()
+        semi_token = self.lexer.token()
 
+        if semi_token is None or semi_token.type != 'SEMI':
+            raise SyntaxError("Missing ';' after return statement")
 
-# Add this to help debug expression parsing
-def p_expression_error(p):
-    '''expression : error'''
-    print(f"Expression error at {p}")
-    breakpoint()
-    return
+        value = self._evaluate_literal(expr_token)
+        raise ReturnException(value)
 
+    def parse_expression(self):
+        left = self._literal_to_ast(self.lexer.token())
 
-# ---- 執行入口 ----
-def run(code: str):
-    # print(f"DEBUG [RUN]: Executing code:\n{code}")
-    lexer = Lexer().build()
-    parser = yacc.yacc(start='program', module=sys.modules[__name__])
+        while True:
+            next_tok = self.lexer._tokens[0] if self.lexer._tokens else None
+            if not next_tok or next_tok.type in ('SEMI', 'COLON'):
+                break
 
-    # Parse all statements
-    ast = parser.parse(code, lexer=lexer)
-    # print(f"DEBUG [RUN]: Parser returned {ast}")
+            # function call pattern: ID followed by args
+            if isinstance(left, Variable) and next_tok.type in ('NUMBER', 'STRING', 'ID'):
+                args = []
+                while self.lexer._tokens and self.lexer._tokens[0].type in ('NUMBER', 'STRING', 'ID'):
+                    arg_tok = self.lexer.token()
+                    args.append(self._literal_to_ast(arg_tok))
+                left = FunctionCall(left.name, args)
 
-    # Execute the program
-    if callable(ast):
-        try:
-            # Execute the main program function
-            result = ast()
-            # print(f"DEBUG [RUN]: Program executed, final result = {result}")
+            elif next_tok.type in ('PLUS', 'MINUS', 'TIMES', 'DIVISION', 'GT', 'LT', 'EQ', 'EQUAL_EQUAL'):
+                op = self.lexer.token()
+                right = self._literal_to_ast(self.lexer.token())
+                left = BinaryExpression(left, op.value, right)
+            else:
+                break
+
+        return left
+
+    def _parse_if(self):
+        # Parse full expression like: x > 4
+        condition = self.parse_expression()
+
+        # Expect colon (same line)
+        colon = self.lexer.token()
+        if not colon or colon.type != 'COLON':
+            raise SyntaxError(f"Expected ':' after if condition, got {colon.type if colon else 'EOF'}")
+
+        then_stmt = self._parse_statement()
+
+        # Check for optional else
+        next_tok = self.lexer._tokens[0] if self.lexer._tokens else None
+        else_stmt = None
+        if next_tok and next_tok.type == 'ELSE':
+            self.lexer.token()  # consume 'else'
+            colon2 = self.lexer.token()
+            if not colon2 or colon2.type != 'COLON':
+                raise SyntaxError("Missing ':' after else")
+            else_stmt = self._parse_statement()
+
+        return IfStatement(condition, [then_stmt], [else_stmt] if else_stmt else None)
+
+    def _parse_assignment(self, id_token):
+        eq_token = self.lexer.token()
+        if not eq_token or eq_token.type != 'EQUAL':
+            raise SyntaxError("Expected '=' in assignment")
+
+        expr = self.parse_expression()  # ✅ handles sum + i
+
+        semi_token = self.lexer.token()
+        if not semi_token or semi_token.type != 'SEMI':
+            raise SyntaxError("Missing ';' after assignment")
+
+        return Assignment(id_token.value, expr)
+
+    def _parse_func_def(self):
+        name_token = self.lexer.token()
+        params = []
+
+        # collect param1 param2 ... until COLON
+        while True:
+            tok = self.lexer.token()
+            if not tok:
+                raise SyntaxError("Unexpected EOF in function def")
+            if tok.type == 'COLON':
+                break
+            if tok.type == 'ID':
+                params.append(tok.value)
+
+        # collect body until SEMI
+        body = []
+        while True:
+            tok = self.lexer.token()
+            if tok is None or tok.type == 'SEMI':
+                break
+            self.lexer._tokens.insert(0, tok)
+            stmt = self._parse_statement()
+            body.append(stmt)
+
+        return FunctionDeclaration(name_token.value, params, body)
+
+    def parse_and_build_ast(self, code):
+        self.lexer.input(code)
+        statements = []
+
+        while True:
+            tok = self.lexer.token()
+            if not tok:
+                break
+
+            if tok.type == 'VAR':
+                statements.append(self._parse_var_declaration())
+            elif tok.type == 'ID':
+                next_tok = self.lexer._tokens[0] if self.lexer._tokens else None
+                if next_tok and next_tok.type == 'EQUAL':
+                    statements.append(self._parse_assignment(tok))
+                else:
+                    statements.append(self._parse_func_call(tok))
+            elif tok.type == 'PRINT':
+                statements.append(self._parse_print())
+            elif tok.type == 'FUNC':
+                statements.append(self._parse_func_def())
+            elif tok.type == 'IF':
+                statements.append(self._parse_if())
+            elif tok.type == 'FOR':
+                statements.append(self._parse_for())
+            elif tok.type == 'WHILE':
+                statements.append(self._parse_while())
+            else:
+                raise SyntaxError(f"Unknown token: {tok.type}")
+
+        return Program(statements)
+
+    def _parse_for(self):
+        var_token = self.lexer.token()
+        if var_token.type != 'ID':
+            raise SyntaxError("Expected loop variable after 'for'")
+
+        in_token = self.lexer.token()
+        if not in_token or in_token.type != 'IN':
+            raise SyntaxError("Expected 'in' after for variable")
+
+        range_token = self.lexer.token()
+        if not range_token or range_token.type != 'RANGE':
+            raise SyntaxError("Expected 'range' after 'in'")
+
+        start_token = self.lexer.token()
+        end_token = self.lexer.token()
+
+        colon_token = self.lexer.token()
+        if not colon_token or colon_token.type != 'COLON':
+            raise SyntaxError("Expected ':' after for loop range")
+
+        body_stmt = self._parse_statement()
+
+        return ForStatement(
+            var_name=var_token.value,
+            start_expr=self._literal_to_ast(start_token),
+            end_expr=self._literal_to_ast(end_token),
+            body=[body_stmt]
+        )
+
+    def _parse_while(self):
+        condition = self.parse_expression()
+
+        colon = self.lexer.token()
+        if not colon or colon.type != 'COLON':
+            raise SyntaxError("Expected ':' after while condition")
+
+        # 支援多行 body
+        body = []
+        while True:
+            if not self.lexer._tokens:
+                break
+            peek = self.lexer._tokens[0]
+            if peek.type in ('VAR', 'PRINT', 'ID', 'IF', 'FOR', 'WHILE', 'FUNC', 'RETURN'):
+                stmt = self._parse_statement()
+                body.append(stmt)
+            else:
+                break
+
+        return WhileStatement(condition, body)
+
+    def _parse_statement(self):
+        tok = self.lexer.token()
+        if not tok:
+            raise SyntaxError("Unexpected end of input in statement")
+
+        if tok.type == 'VAR':
+            return self._parse_var_declaration()
+        elif tok.type == 'RETURN':
+            return self._parse_return()
+        elif tok.type == 'PRINT':
+            return self._parse_print()
+        elif tok.type == 'ID':
+            next_tok = self.lexer._tokens[0] if self.lexer._tokens else None
+            if next_tok and next_tok.type == 'EQUAL':
+                return self._parse_assignment(tok)
+            else:
+                return self._parse_func_call(tok)
+        elif tok.type == 'IF':
+            return self._parse_if()
+        else:
+            raise SyntaxError(f"Unexpected token in statement: {tok.type}")
+
+    def _parse_assignment(self, id_token):
+        eq_token = self.lexer.token()
+        if not eq_token or eq_token.type != 'EQUAL':
+            raise SyntaxError("Expected '=' in assignment")
+
+        expr = self.parse_expression()  # ✅ 使用這個來支持運算式 like sum + i
+
+        semi_token = self.lexer.token()
+        if not semi_token or semi_token.type != 'SEMI':
+            raise SyntaxError("Missing ';' after assignment")
+
+        return Assignment(id_token.value, expr)
+
+    def _parse_func_call(self, id_token):
+        args = []
+        while self.lexer._tokens and self.lexer._tokens[0].type in ('NUMBER', 'STRING', 'ID'):
+            arg_tok = self.lexer.token()
+            args.append(self._literal_to_ast(arg_tok))
+
+        semi = self.lexer.token()
+        if not semi or semi.type != 'SEMI':
+            raise SyntaxError("Missing ';' after function call")
+
+        return FunctionCall(id_token.value, args)
+
+    def _parse_print(self):
+        expr = self.parse_expression()
+        semi_token = self.lexer.token()
+
+        if semi_token.type != 'SEMI':
+            raise SyntaxError("Missing semicolon after print")
+
+        return PrintStatement(expr)
+
+    def _parse_var_declaration(self):
+        id_token = self.lexer.token()
+        eq_token = self.lexer.token()
+
+        if id_token.type != 'ID' or eq_token.type != 'EQUAL':
+            raise SyntaxError("Invalid var declaration")
+
+        # NEW: parse full expression instead of 1 token
+        expr = self.parse_expression()
+
+        semi_token = self.lexer.token()
+        if semi_token.type != 'SEMI':
+            raise SyntaxError("Missing semicolon after variable declaration")
+
+        return VarDeclaration(id_token.value, expr)
+
+    def _literal_to_ast(self, token):
+        if token.type == 'NUMBER':
+            return Literal(token.value)
+        elif token.type == 'STRING':
+            return Literal(token.value)
+        elif token.type == 'ID':
+            return Variable(token.value)
+        else:
+            raise SyntaxError(f"Unsupported expression: {token.type}")
+
+    def run_ast(self, code):
+        ast = self.parse_and_build_ast(code)
+        for stmt in ast.statements:
+            self.execute(stmt)
+
+    def execute(self, node):
+        if isinstance(node, VarDeclaration):
+            value = self.evaluate_expr(node.expr)
+            self.environment.define(node.name, value)
+        elif isinstance(node, Assignment):
+            value = self.evaluate_expr(node.expr)
+            if self.environment.exists(node.name):
+                self.environment.assign(node.name, value)
+            else:
+                self.environment.define(node.name, value)
+        elif isinstance(node, PrintStatement):
+            value = self.evaluate_expr(node.expr)
+            print(value)
+        elif isinstance(node, FunctionCall):
+            func = self.environment.get(node.name)
+            if not isinstance(func, Function):
+                raise KillaRuntimeError(f"'{node.name}' is not a function")
+
+            arg_values = [self.evaluate_expr(arg) for arg in node.arguments]
+            result = func.call(self, arg_values)
             return result
-        except Exception as e:
-            raise Exception(f"Runtime error: {e}")
-    return ast
+        elif isinstance(node, ForStatement):
+            start = self.evaluate_expr(node.start_expr)
+            end = self.evaluate_expr(node.end_expr)
+
+            for i in range(start, end):
+                if node.var_name in self.environment.values:
+                    self.environment.assign(node.var_name, i)
+                else:
+                    self.environment.define(node.var_name, i)
+                for stmt in node.body:
+                    self.execute(stmt)
+        elif isinstance(node, IfStatement):
+            cond = self.evaluate_expr(node.condition)
+            if cond:
+                for stmt in node.then_branch:
+                    self.execute(stmt)
+            elif node.else_branch:
+                for stmt in node.else_branch:
+                    self.execute(stmt)
+        elif isinstance(node, WhileStatement):
+            while self.evaluate_expr(node.condition):
+                for stmt in node.body:
+                    self.execute(stmt)
+        elif isinstance(node, FunctionDeclaration):
+            func = Function(
+                name=node.name,
+                params=node.params,
+                body_tokens=node.body,
+                closure=self.environment
+            )
+            self.environment.define(node.name, func)
+        elif isinstance(node, ReturnStatement):
+            value = self.evaluate_expr(node.expr)
+            raise KillaReturn(value)
+        else:
+            raise KillaRuntimeError(f"Unknown AST node type: {type(node).__name__}")
+
+    def evaluate_expr(self, expr):
+        if isinstance(expr, Literal):
+            return expr.value
+
+        elif isinstance(expr, Variable):
+            value = self.environment.get(expr.name)
+            # If it's a function, call it (no arguments)
+            if isinstance(value, Function):
+                return value.call(self, [])
+            return value
+
+        elif isinstance(expr, FunctionCall):
+            func = self.environment.get(expr.name)
+            if not isinstance(func, Function):
+                raise KillaRuntimeError(f"'{expr.name}' is not a function")
+            arg_values = [self.evaluate_expr(arg) for arg in expr.arguments]
+            return func.call(self, arg_values)
+
+        elif isinstance(expr, BinaryExpression):
+            left = self.evaluate_expr(expr.left)
+            right = self.evaluate_expr(expr.right)
+            return self.eval_op(left, expr.operator, right)
+
+        else:
+            raise KillaRuntimeError(f"Unknown expression type: {type(expr).__name__}")
+
+    @property
+    def tokens(self):
+        return self._tokens
+
+    def _parse_return(self):
+        expr = self.parse_expression()  # ← this handles full expressions like n * fact n - 1
+
+        semi_token = self.lexer.token()
+        if not semi_token or semi_token.type != 'SEMI':
+            raise SyntaxError("Missing ';' after return")
+
+        return ReturnStatement(expr)
 
 
-# Define precedence and associativity
-precedence = (
-    ('left', 'EQUAL_EQUAL', 'NOTEQUAL'),  # 比較運算子
-    ('left', 'LT', 'LE', 'GT', 'GE'),  # 關係運算子
-    ('left', 'PLUS', 'MINUS'),  # 加減
-    ('left', 'TIMES', 'DIVISION'),  # 乘除
-    ('right', 'EQUAL')  # 賦值運算子右結合，最低優先度
-)
+def run_ast(code):
+    interp = KillaInterpreter()
+    program = interp.parse_and_build_ast(code)
+    for stmt in program.statements:
+        interp.execute(stmt)
 
-# 建立 parser
-lexer = Lexer()
-tokens = lexer.tokens
-parser = yacc.yacc(start='program', debug=True)
 
-# 讀取輸入
-if __name__ == "__main__":
-    while True:
-        try:
-            text = input('killa_input> ')
-            if not text:
+if __name__ == '__main__':
+    interp = KillaInterpreter()
+    try:
+        while True:
+            code = input("killa_input> ")
+            if code.strip() == '':
                 continue
-        except EOFError:
-            break
-        result = parser.parse(text, lexer=lexer.lexer)
-        if result is not None:
-            if callable(result):
-                result = result()
-            print(result)
+            interp.parse_and_run(code)
+    except (EOFError, KeyboardInterrupt):
+        print("\nExiting Killa")

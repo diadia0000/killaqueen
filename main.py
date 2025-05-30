@@ -1,10 +1,11 @@
 import killa
 
 code = """
-func hello():
-    ret 100;
-var x = hello();
-prt(x);
+var sum = 0;
+for i in range 0 5: 
+    sum = sum + i;
+prt sum;
+
 """
 
-killa.run(code)
+killa.run_ast(code)
