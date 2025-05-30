@@ -69,6 +69,11 @@ class Environment:
             return self.parent.exists(name)
         return False
 
+class UnaryExpression(ASTNode):
+    def __init__(self, operator, operand):
+        self.operator = operator
+        self.operand = operand
+
 
 class KillaInterpreter:
     def __init__(self):
@@ -101,7 +106,20 @@ class KillaInterpreter:
         if op == '<=': return left <= right
         if op == '==': return left == right
         if op == '!=': return left != right
+        # Logical operators
+        if op == 'and': return left and right
+        if op == 'or': return left or right
         raise KillaRuntimeError(f"Unknown operator {op}")
+
+    def eval_unary_op(self, op, operand):
+        """Handle unary operators like 'not'"""
+        if op == 'not':
+            return not operand
+        if op == '-':
+            return -operand
+        if op == '+':
+            return +operand
+        raise KillaRuntimeError(f"Unknown unary operator {op}")
 
     def parse_and_run(self, code):
         # TEMP: original interpreter path
@@ -370,29 +388,32 @@ class KillaInterpreter:
         raise ReturnException(value)
 
     def parse_expression(self):
-        left = self._literal_to_ast(self.lexer.token())
+        left = self._parse_unary()
 
-        while True:
-            next_tok = self.lexer._tokens[0] if self.lexer._tokens else None
-            if not next_tok or next_tok.type in ('SEMI', 'COLON'):
+        while self.lexer._tokens:
+            next_tok = self.lexer._tokens[0]
+            if next_tok.type in ('SEMI', 'COLON'):
                 break
 
-            # function call pattern: ID followed by args
-            if isinstance(left, Variable) and next_tok.type in ('NUMBER', 'STRING', 'ID'):
-                args = []
-                while self.lexer._tokens and self.lexer._tokens[0].type in ('NUMBER', 'STRING', 'ID'):
-                    arg_tok = self.lexer.token()
-                    args.append(self._literal_to_ast(arg_tok))
-                left = FunctionCall(left.name, args)
-
-            elif next_tok.type in ('PLUS', 'MINUS', 'TIMES', 'DIVISION', 'GT', 'LT', 'EQ', 'EQUAL_EQUAL'):
+            if next_tok.type in ('PLUS', 'MINUS', 'TIMES', 'DIVISION', 'DIVISIBILITY',
+                                 'GT', 'LT', 'GE', 'LE', 'EQUAL_EQUAL', 'NOTEQUAL',
+                                 'AND', 'OR'):
                 op = self.lexer.token()
-                right = self._literal_to_ast(self.lexer.token())
+                right = self._parse_unary()
                 left = BinaryExpression(left, op.value, right)
             else:
                 break
 
         return left
+
+    def _parse_unary(self):
+        tok = self.lexer._tokens[0]
+        if tok.type == 'NOT':
+            self.lexer.token()  # consume 'not'
+            operand = self._parse_unary()
+            return UnaryExpression('not', operand)
+        else:
+            return self._literal_to_ast(self.lexer.token())
 
     def _parse_if(self):
         # Parse full expression like: x > 4
@@ -615,6 +636,10 @@ class KillaInterpreter:
             return Literal(token.value)
         elif token.type == 'STRING':
             return Literal(token.value)
+        elif token.type == 'TRUE':
+            return Literal(True)
+        elif token.type == 'FALSE':
+            return Literal(False)
         elif token.type == 'ID':
             return Variable(token.value)
         else:
@@ -693,6 +718,9 @@ class KillaInterpreter:
             if isinstance(value, Function):
                 return value.call(self, [])
             return value
+        elif isinstance(expr, UnaryExpression):
+            operand = self.evaluate_expr(expr.operand)
+            return self.eval_unary_op(expr.operator, operand)
 
         elif isinstance(expr, FunctionCall):
             func = self.environment.get(expr.name)

@@ -17,7 +17,8 @@ class Lexer:
             'in': 'IN', 'range': 'RANGE', 'prt': 'PRINT',
             'ret': 'RETURN', 'switch': 'SWITCH',
             'case': 'CASE', 'default': 'DEFAULT',
-            'var': 'VAR', 'func': 'FUNC',
+            'var': 'VAR', 'func': 'FUNC', 'and': 'AND',
+            'or': 'OR', 'not': 'NOT'
         }
 
         self.token_spec = [
@@ -44,6 +45,11 @@ class Lexer:
             ('COMMENT', r'\#.*'),
             ('NEWLINE', r'\n'),
             ('SKIP', r'[ \t]+'),
+            ('AND', r'\band\b'),
+            ('OR', r'\bor\b'),
+            ('NOT', r'\bnot\b'),
+            ('TRUE', r'😀'),
+            ('FALSE', r'😫'),
             ('MISMATCH', r'.'),
         ]
 
