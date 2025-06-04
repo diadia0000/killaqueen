@@ -137,7 +137,7 @@ class KillaInterpreter:
         semi_token = self.lexer.token()
 
         if id_token.type != 'ID' or eq_token.type != 'EQUAL' or semi_token.type != 'SEMI':
-            raise SyntaxError("Invalid variable assignment syntax")
+            raise KillaSyntaxError("Invalid variable assignment syntax")
 
         value = self._evaluate_literal(expr_token)
         self.environment.define(id_token.value, value)
@@ -175,14 +175,14 @@ class KillaInterpreter:
             except RuntimeError:
                 return 0  # fallback if variable is undefined
         else:
-            raise SyntaxError(f"Unsupported expression type: {token.type}")
+            raise KillaSyntaxError(f"Unsupported expression type: {token.type}")
 
     def _handle_print(self):
         expr_token = self.lexer.token()
         semi_token = self.lexer.token()
 
         if semi_token.type != 'SEMI':
-            raise SyntaxError("Missing semicolon after print")
+            raise KillaSyntaxError("Missing semicolon after print")
 
         value = self._evaluate_literal(expr_token)
         print(value)
@@ -193,7 +193,7 @@ class KillaInterpreter:
 
         colon_token = self.lexer.token()
         if colon_token.type != 'COLON':
-            raise SyntaxError("Missing ':' after if condition")
+            raise KillaSyntaxError("Missing ':' after if condition")
 
         if condition:
             self._run_next_statement()
@@ -202,7 +202,7 @@ class KillaInterpreter:
             if next_tok and next_tok.type == 'ELSE':
                 colon = self.lexer.token()
                 if colon.type != 'COLON':
-                    raise SyntaxError("Missing ':' after else")
+                    raise KillaSyntaxError("Missing ':' after else")
                 self._skip_next_statement()
             elif next_tok:
                 self.lexer._tokens.insert(0, next_tok)  # Not else? Put it back.
@@ -217,7 +217,7 @@ class KillaInterpreter:
     def _handle_else(self):
         colon = self.lexer._token()
         if colon.type != 'COLON':
-            raise SyntaxError("Missing ':' after else")
+            raise KillaSyntaxError("Missing ':' after else")
         self._run_next_statement()
 
     def _skip_next_statement(self):
@@ -229,7 +229,7 @@ class KillaInterpreter:
                 if not self.lexer._token():
                     break
         else:
-            raise SyntaxError(f"Unexpected token while skipping: {tok.type}")
+            raise KillaSyntaxError(f"Unexpected token while skipping: {tok.type}")
 
     def _parse_condition(self):
         left = self.lexer.token()
@@ -237,7 +237,7 @@ class KillaInterpreter:
         right = self.lexer.token()
 
         if not (left and op and right):
-            raise SyntaxError("Incomplete condition")
+            raise KillaSyntaxError("Incomplete condition")
 
         left_val = self._evaluate_literal(left)
         right_val = self._evaluate_literal(right)
@@ -340,7 +340,7 @@ class KillaInterpreter:
         # Lookup function
         func = self.environment.get(func_name_token.value)
         if not isinstance(func, Function):
-            raise RuntimeError(f"'{func_name_token.value}' is not a function")
+            raise KillaRuntimeError(f"'{func_name_token.value}' is not a function")
 
         # Call the function with evaluated arguments
         result = func.call(self, args)
@@ -356,7 +356,7 @@ class KillaInterpreter:
         while True:
             tok = self.lexer.token()
             if tok is None:
-                raise SyntaxError("Unexpected end of input in function definition")
+                raise KillaSyntaxError("Unexpected end of input in function definition")
             if tok.type == 'COLON':
                 break
             if tok.type == 'ID':
@@ -376,13 +376,13 @@ class KillaInterpreter:
 
     def _handle_return(self):
         if not isinstance(self.environment, Environment):
-            raise SyntaxError("return outside function")
+            raise KillaSyntaxError("return outside function")
 
         expr_token = self.lexer.token()
         semi_token = self.lexer.token()
 
         if semi_token is None or semi_token.type != 'SEMI':
-            raise SyntaxError("Missing ';' after return statement")
+            raise KillaSyntaxError("Missing ';' after return statement")
 
         value = self._evaluate_literal(expr_token)
         raise ReturnException(value)
@@ -407,13 +407,34 @@ class KillaInterpreter:
         return left
 
     def _parse_unary(self):
-        tok = self.lexer._tokens[0]
+        tok = self.lexer.token()
         if tok.type == 'NOT':
-            self.lexer.token()  # consume 'not'
             operand = self._parse_unary()
             return UnaryExpression('not', operand)
+        elif tok.type == 'ID':
+            # 檢查是否為 function call
+            next_tok = self.lexer._tokens[0] if self.lexer._tokens else None
+            if next_tok and next_tok.type == 'LPAREN':
+                self.lexer.token()  # consume '('
+                args = []
+
+                if self.lexer._tokens[0].type != 'RPAREN':
+                    while True:
+                        args.append(self.parse_expression())
+                        if self.lexer._tokens[0].type == 'DOT':
+                            self.lexer.token()  # consume ','
+                        else:
+                            break
+
+                rparen = self.lexer.token()
+                if rparen.type != 'RPAREN':
+                    raise SyntaxError("Expected ')' after function arguments")
+
+                return FunctionCall(tok.value, args)
+            else:
+                return Variable(tok.value)
         else:
-            return self._literal_to_ast(self.lexer.token())
+            return self._literal_to_ast(tok)
 
     def _parse_if(self):
         # Parse full expression like: x > 4
@@ -422,7 +443,7 @@ class KillaInterpreter:
         # Expect colon (same line)
         colon = self.lexer.token()
         if not colon or colon.type != 'COLON':
-            raise SyntaxError(f"Expected ':' after if condition, got {colon.type if colon else 'EOF'}")
+            raise KillaSyntaxError(f"Expected ':' after if condition, got {colon.type if colon else 'EOF'}")
 
         then_stmt = self._parse_statement()
 
@@ -433,7 +454,7 @@ class KillaInterpreter:
             self.lexer.token()  # consume 'else'
             colon2 = self.lexer.token()
             if not colon2 or colon2.type != 'COLON':
-                raise SyntaxError("Missing ':' after else")
+                raise KillaSyntaxError("Missing ':' after else")
             else_stmt = self._parse_statement()
 
         return IfStatement(condition, [then_stmt], [else_stmt] if else_stmt else None)
@@ -441,13 +462,13 @@ class KillaInterpreter:
     def _parse_assignment(self, id_token):
         eq_token = self.lexer.token()
         if not eq_token or eq_token.type != 'EQUAL':
-            raise SyntaxError("Expected '=' in assignment")
+            raise KillaSyntaxError("Expected '=' in assignment")
 
         expr = self.parse_expression()  # ✅ handles sum + i
 
         semi_token = self.lexer.token()
         if not semi_token or semi_token.type != 'SEMI':
-            raise SyntaxError("Missing ';' after assignment")
+            raise KillaSyntaxError("Missing ';' after assignment")
 
         return Assignment(id_token.value, expr)
 
@@ -459,7 +480,7 @@ class KillaInterpreter:
         while True:
             tok = self.lexer.token()
             if not tok:
-                raise SyntaxError("Unexpected EOF in function def")
+                raise KillaSyntaxError("Unexpected EOF in function def")
             if tok.type == 'COLON':
                 break
             if tok.type == 'ID':
@@ -468,10 +489,12 @@ class KillaInterpreter:
         # collect body until SEMI
         body = []
         while True:
-            tok = self.lexer.token()
-            if tok is None or tok.type == 'SEMI':
+            if not self.lexer._tokens:
+                raise KillaSyntaxError("Expected 'end' to close function definition")
+            peek = self.lexer._tokens[0]
+            if peek.type == 'END':
+                self.lexer.token()  # consume 'end'
                 break
-            self.lexer._tokens.insert(0, tok)
             stmt = self._parse_statement()
             body.append(stmt)
 
@@ -505,29 +528,29 @@ class KillaInterpreter:
             elif tok.type == 'WHILE':
                 statements.append(self._parse_while())
             else:
-                raise SyntaxError(f"Unknown token: {tok.type}")
+                raise KillaSyntaxError(f"Unknown token: {tok.type}")
 
         return Program(statements)
 
     def _parse_for(self):
         var_token = self.lexer.token()
         if var_token.type != 'ID':
-            raise SyntaxError("Expected loop variable after 'for'")
+            raise KillaSyntaxError("Expected loop variable after 'for'")
 
         in_token = self.lexer.token()
         if not in_token or in_token.type != 'IN':
-            raise SyntaxError("Expected 'in' after for variable")
+            raise KillaSyntaxError("Expected 'in' after for variable")
 
         range_token = self.lexer.token()
         if not range_token or range_token.type != 'RANGE':
-            raise SyntaxError("Expected 'range' after 'in'")
+            raise KillaSyntaxError("Expected 'range' after 'in'")
 
         start_token = self.lexer.token()
         end_token = self.lexer.token()
 
         colon_token = self.lexer.token()
         if not colon_token or colon_token.type != 'COLON':
-            raise SyntaxError("Expected ':' after for loop range")
+            raise KillaSyntaxError("Expected ':' after for loop range")
 
         body_stmt = self._parse_statement()
 
@@ -543,7 +566,7 @@ class KillaInterpreter:
 
         colon = self.lexer.token()
         if not colon or colon.type != 'COLON':
-            raise SyntaxError("Expected ':' after while condition")
+            raise KillaSyntaxError("Expected ':' after while condition")
 
         # 支援多行 body
         body = []
@@ -562,7 +585,7 @@ class KillaInterpreter:
     def _parse_statement(self):
         tok = self.lexer.token()
         if not tok:
-            raise SyntaxError("Unexpected end of input in statement")
+            raise KillaSyntaxError("Unexpected end of input in statement")
 
         if tok.type == 'VAR':
             return self._parse_var_declaration()
@@ -579,39 +602,63 @@ class KillaInterpreter:
         elif tok.type == 'IF':
             return self._parse_if()
         else:
-            raise SyntaxError(f"Unexpected token in statement: {tok.type}")
+            raise KillaSyntaxError(f"Unexpected token in statement: {tok.type}")
 
     def _parse_assignment(self, id_token):
         eq_token = self.lexer.token()
         if not eq_token or eq_token.type != 'EQUAL':
-            raise SyntaxError("Expected '=' in assignment")
+            raise KillaSyntaxError("Expected '=' in assignment")
 
         expr = self.parse_expression()  # ✅ 使用這個來支持運算式 like sum + i
 
         semi_token = self.lexer.token()
         if not semi_token or semi_token.type != 'SEMI':
-            raise SyntaxError("Missing ';' after assignment")
+            raise KillaSyntaxError("Missing ';' after assignment")
 
         return Assignment(id_token.value, expr)
 
     def _parse_func_call(self, id_token):
-        args = []
-        while self.lexer._tokens and self.lexer._tokens[0].type in ('NUMBER', 'STRING', 'ID'):
-            arg_tok = self.lexer.token()
-            args.append(self._literal_to_ast(arg_tok))
+        lparen = self.lexer.token()
+        if not lparen or lparen.type != 'LPAREN':
+            raise KillaSyntaxError("Expected '(' after function name")
 
+        args = []
+
+        # 如果下一個不是 ')', 就解析參數
+        if self.lexer._tokens and self.lexer._tokens[0].type != 'RPAREN':
+            while True:
+                args.append(self.parse_expression())
+                if self.lexer._tokens and self.lexer._tokens[0].type == 'DOT':
+                    self.lexer.token()  # consume ','
+                else:
+                    break
+
+        # ✅ 真正吃掉右括號
+        rparen = self.lexer.token()
+        if not rparen or rparen.type != 'RPAREN':
+            raise KillaSyntaxError("Expected ')' after function arguments")
+
+        # ✅ 然後吃掉分號
         semi = self.lexer.token()
         if not semi or semi.type != 'SEMI':
-            raise SyntaxError("Missing ';' after function call")
+            raise KillaSyntaxError("Missing ';' after function call")
 
         return FunctionCall(id_token.value, args)
 
     def _parse_print(self):
-        expr = self.parse_expression()
-        semi_token = self.lexer.token()
+        lparen = self.lexer.token()
+        if not lparen or lparen.type != 'LPAREN':
+            raise KillaSyntaxError("Expected '(' after prt")
 
-        if semi_token.type != 'SEMI':
-            raise SyntaxError("Missing semicolon after print")
+        expr = self.parse_expression()
+
+        rparen = self.lexer.token()
+        if not rparen or rparen.type != 'RPAREN':
+            raise KillaSyntaxError("Expected ')' after expression")
+
+        semi_token = self.lexer.token()
+        if not semi_token or semi_token.type != 'SEMI':
+            raise KillaSyntaxError("Missing semicolon after print")
 
         return PrintStatement(expr)
 
@@ -620,14 +667,14 @@ class KillaInterpreter:
         eq_token = self.lexer.token()
 
         if id_token.type != 'ID' or eq_token.type != 'EQUAL':
-            raise SyntaxError("Invalid var declaration")
+            raise KillaSyntaxError("Invalid var declaration")
 
         # NEW: parse full expression instead of 1 token
         expr = self.parse_expression()
 
         semi_token = self.lexer.token()
         if semi_token.type != 'SEMI':
-            raise SyntaxError("Missing semicolon after variable declaration")
+            raise KillaSyntaxError("Missing semicolon after variable declaration")
 
         return VarDeclaration(id_token.value, expr)
 
@@ -643,7 +690,7 @@ class KillaInterpreter:
         elif token.type == 'ID':
             return Variable(token.value)
         else:
-            raise SyntaxError(f"Unsupported expression: {token.type}")
+            raise KillaSyntaxError(f"Unsupported expression: {token.type}")
 
     def run_ast(self, code):
         ast = self.parse_and_build_ast(code)
@@ -654,15 +701,19 @@ class KillaInterpreter:
         if isinstance(node, VarDeclaration):
             value = self.evaluate_expr(node.expr)
             self.environment.define(node.name, value)
+            return None
         elif isinstance(node, Assignment):
             value = self.evaluate_expr(node.expr)
             if self.environment.exists(node.name):
                 self.environment.assign(node.name, value)
+                return None
             else:
                 self.environment.define(node.name, value)
+                return None
         elif isinstance(node, PrintStatement):
             value = self.evaluate_expr(node.expr)
             print(value)
+            return None
         elif isinstance(node, FunctionCall):
             func = self.environment.get(node.name)
             if not isinstance(func, Function):
@@ -687,13 +738,17 @@ class KillaInterpreter:
             if cond:
                 for stmt in node.then_branch:
                     self.execute(stmt)
+                    return None
+                return None
             elif node.else_branch:
                 for stmt in node.else_branch:
                     self.execute(stmt)
+            return None
         elif isinstance(node, WhileStatement):
             while self.evaluate_expr(node.condition):
                 for stmt in node.body:
                     self.execute(stmt)
+            return None
         elif isinstance(node, FunctionDeclaration):
             func = Function(
                 name=node.name,
@@ -702,6 +757,7 @@ class KillaInterpreter:
                 closure=self.environment
             )
             self.environment.define(node.name, func)
+            return None
         elif isinstance(node, ReturnStatement):
             value = self.evaluate_expr(node.expr)
             raise KillaReturn(value)
