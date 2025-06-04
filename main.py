@@ -1,12 +1,13 @@
 import killa
 
 code = """
-var happy = 😀;
-var sad = 😫;
+🤕 i = 1;
+🤕 sum = 0;
 
-if happy and not sad:
-    prt 123;
-
+😺 i <= 5:
+    sum = sum + i;
+    i = i + 1;
+    😭(sum);
 """
 
 killa.run_ast(code)

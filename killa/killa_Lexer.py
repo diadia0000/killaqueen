@@ -12,13 +12,10 @@ class Lexer:
         self.pos = 0
         self.text = ''
         self.reserved = {
-            'id': 'ID', 'for': 'FOR', 'while': 'WHILE',
-            'if': 'IF', 'else': 'ELSE', 'brk': 'BREAK',
-            'in': 'IN', 'range': 'RANGE', 'prt': 'PRINT',
-            'ret': 'RETURN', 'switch': 'SWITCH',
+            'id': 'ID', 'for': 'FOR', 'if': 'IF', 'else': 'ELSE', 'brk': 'BREAK',
+            'in': 'IN', 'range': 'RANGE', 'switch': 'SWITCH',
             'case': 'CASE', 'default': 'DEFAULT',
-            'var': 'VAR', 'func': 'FUNC', 'and': 'AND',
-            'or': 'OR', 'not': 'NOT'
+            'and': 'AND','or': 'OR', 'not': 'NOT'
         }
 
         self.token_spec = [
@@ -42,15 +39,21 @@ class Lexer:
             ('SEMI', r';'),
             ('COLON', r':'),
             ('ID', r'[a-zA-Z_][a-zA-Z0-9_]*'),
+            ('PRINT',r'😭'),
+            ('RETURN',r'🍉'),
             ('COMMENT', r'\#.*'),
             ('NEWLINE', r'\n'),
             ('SKIP', r'[ \t]+'),
             ('AND', r'\band\b'),
             ('OR', r'\bor\b'),
             ('NOT', r'\bnot\b'),
+            ('FUNC',r'🤢'),
             ('TRUE', r'😀'),
             ('FALSE', r'😫'),
-            ('MISMATCH', r'.'),
+            ('END', r'🥶'),
+            ('VAR',r'🤕'),
+            ('WHILE',r'😺'),
+            ('MISMATCH', r'.')
         ]
 
         self.token_re = re.compile('|'.join(f'(?P<{name}>{regex})' for name, regex in self.token_spec))
