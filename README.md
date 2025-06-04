@@ -31,18 +31,59 @@ pip install ply
 ### **1.命令式編程**
   - 語法範例：
   ```txt
-    x = 10
-    y = x * 2
+   🤕 x = 10
+   🤕 y = x * 2
     if y > 15:
-        prt("y is large")
+        😭("y is large")
   ```
 ### **2.支援基本函數**
 - 支援簡單的函數
 - 語法範例
-  ```txt
-  func square(n):
-    ret n * n
-  prt(square(5));  // 輸出 25
-  ```
+```txt
+🤢 square(n):
+   🍉 n * n;
+🥶
+😭(square(5));
+```
 
-## 如何安裝及使用
+## 使用方式  
+
+### function
+```text
+🤢 greet:
+    😭("bye");
+🥶
+
+greet();
+```
+### if else statement and logic operator
+```text
+🤕 x = 😀;
+🤕 y = 😫;
+
+if x and not y:
+    😭(114514);
+
+```
+
+### for loop
+```text
+🤕 sum = 0;
+
+for i in range 1 6:
+  sum = sum + i;
+  
+😭(sum);
+
+```
+
+### while loop
+```text
+🤕 i = 1;
+🤕 sum = 0;
+
+😺 i <= 5:
+    sum = sum + i;
+    i = i + 1;
+    😭(sum);
+```
