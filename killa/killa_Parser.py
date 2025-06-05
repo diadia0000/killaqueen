@@ -69,6 +69,7 @@ class Environment:
             return self.parent.exists(name)
         return False
 
+
 class UnaryExpression(ASTNode):
     def __init__(self, operator, operand):
         self.operator = operator
@@ -95,10 +96,10 @@ class KillaInterpreter:
         return expr
 
     def eval_op(self, left, op, right):
-        if op == '+': return left + right
-        if op == '-': return left - right
-        if op == '*': return left * right
-        if op == '/': return left / right
+        if op == '🤌': return left + right
+        if op == '😡': return left - right
+        if op == '☹️': return left * right
+        if op == '🤬': return left / right
         if op == '//': return left // right
         if op == '>': return left > right
         if op == '<': return left < right
@@ -115,9 +116,9 @@ class KillaInterpreter:
         """Handle unary operators like 'not'"""
         if op == 'not':
             return not operand
-        if op == '-':
+        if op == '😡':
             return -operand
-        if op == '+':
+        if op == '🤌':
             return +operand
         raise KillaRuntimeError(f"Unknown unary operator {op}")
 

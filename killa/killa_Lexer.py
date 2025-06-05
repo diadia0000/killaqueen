@@ -3,6 +3,8 @@
 import re
 from collections import namedtuple
 
+from killa.error import KillaSyntaxError
+
 Token = namedtuple('Token', ['type', 'value', 'lineno', 'lexpos'])
 
 
@@ -12,10 +14,9 @@ class Lexer:
         self.pos = 0
         self.text = ''
         self.reserved = {
-            'id': 'ID', 'for': 'FOR', 'if': 'IF', 'else': 'ELSE', 'brk': 'BREAK',
-            'in': 'IN', 'range': 'RANGE', 'switch': 'SWITCH',
-            'case': 'CASE', 'default': 'DEFAULT',
-            'and': 'AND','or': 'OR', 'not': 'NOT'
+            'id': 'ID', 'if': 'IF', 'else': 'ELSE', 'brk': 'BREAK',
+            'switch': 'SWITCH','case': 'CASE', 'default': 'DEFAULT',
+            'and': 'AND', 'or': 'OR', 'not': 'NOT'
         }
 
         self.token_spec = [
@@ -27,32 +28,35 @@ class Lexer:
             ('NOTEQUAL', r'!='),
             ('GT', r'>'),
             ('LT', r'<'),
-            ('PLUS', r'\+'),
-            ('MINUS', r'-'),
-            ('TIMES', r'\*'),
+            ('PLUS', r'🤌'),
+            ('MINUS', r'😡'),
+            ('TIMES', r'\☹️'),
             ('DIVISIBILITY', r'\/\/'),
-            ('DIVISION', r'/'),
-            ('EQUAL', r'='),
+            ('DIVISION', r'🤬'),
+            ('EQUAL', r'🥳'),
             ('LPAREN', r'\('),
             ('RPAREN', r'\)'),
             ('DOT', r','),
             ('SEMI', r';'),
             ('COLON', r':'),
             ('ID', r'[a-zA-Z_][a-zA-Z0-9_]*'),
-            ('PRINT',r'😭'),
-            ('RETURN',r'🍉'),
+            ('PRINT', r'😭'),
+            ('RETURN', r'🍉'),
             ('COMMENT', r'\#.*'),
             ('NEWLINE', r'\n'),
             ('SKIP', r'[ \t]+'),
             ('AND', r'\band\b'),
             ('OR', r'\bor\b'),
             ('NOT', r'\bnot\b'),
-            ('FUNC',r'🤢'),
+            ('FUNC', r'🤢'),
             ('TRUE', r'😀'),
             ('FALSE', r'😫'),
             ('END', r'🥶'),
-            ('VAR',r'🤕'),
-            ('WHILE',r'😺'),
+            ('VAR', r'🤕'),
+            ('WHILE', r'😺'),
+            ('FOR', r'🤐'),
+            ('IN', r'🤫'),
+            ('RANGE', r'🤣'),
             ('MISMATCH', r'.')
         ]
 
@@ -100,6 +104,6 @@ class Lexer:
             elif kind == 'STRING':
                 value = value[1:-1]
             elif kind == 'MISMATCH':
-                raise SyntaxError(f"Unexpected character {value} at line {self.lineno}")
+                raise KillaSyntaxError(f"Unexpected character {value} at line {self.lineno}")
 
             yield Token(kind, value, self.lineno, lexpos)

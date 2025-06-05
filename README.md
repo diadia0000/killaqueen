@@ -31,10 +31,10 @@ pip install ply
 ### **1.命令式編程**
   - 語法範例：
   ```txt
-   🤕 x = 10
-   🤕 y = x * 2
+   🤕 x = 10;
+   🤕 y = x * 2;
     if y > 15:
-        😭("y is large")
+        😭("y is large");
   ```
 ### **2.支援基本函數**
 - 支援簡單的函數
@@ -58,8 +58,8 @@ greet();
 ```
 ### if else statement and logic operator
 ```text
-🤕 x = 😀;
-🤕 y = 😫;
+🤕 x 🥳 😀;
+🤕 y 🥳 😫;
 
 if x and not y:
     😭(114514);
@@ -68,10 +68,10 @@ if x and not y:
 
 ### for loop
 ```text
-🤕 sum = 0;
+🤕 sum 🥳 0;
 
-for i in range 1 6:
-  sum = sum + i;
+🤐 i 🤫 🤣  1 6:
+  sum 🥳 sum 🤌 i;
   
 😭(sum);
 
@@ -79,11 +79,11 @@ for i in range 1 6:
 
 ### while loop
 ```text
-🤕 i = 1;
-🤕 sum = 0;
+🤕 i 🥳 1;
+🤕 sum 🥳 0;
 
 😺 i <= 5:
-    sum = sum + i;
-    i = i + 1;
-    😭(sum);
+    sum 🥳 sum 🤌 i;
+    i 🥳 i 🤌 1;
+    😭😖sum😫;
 ```
