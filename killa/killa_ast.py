@@ -97,3 +97,6 @@ class CaseClause(ASTNode):
 
 class BreakStatement(ASTNode):
     pass
+
+class ContinueStatement(ASTNode):
+    pass

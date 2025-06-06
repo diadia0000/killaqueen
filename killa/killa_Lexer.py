@@ -16,7 +16,7 @@ class Lexer:
         self.reserved = {
             'id': 'ID', 'if': 'IF', 'else': 'ELSE', 'brk': 'BREAK',
             'switch': 'SWITCH','case': 'CASE', 'default': 'DEFAULT',
-            'and': 'AND', 'or': 'OR', 'not': 'NOT'
+            'and': 'AND', 'or': 'OR', 'not': 'NOT', 'continue':'CONTINUE'
         }
 
         self.token_spec = [

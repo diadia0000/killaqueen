@@ -77,7 +77,8 @@ class UnaryExpression(ASTNode):
 class BreakException(Exception):
     pass
 
-
+class ContinueException(Exception):
+    pass
 
 
 class KillaInterpreter:
@@ -613,6 +614,12 @@ class KillaInterpreter:
             if not semi or semi.type != 'SEMI':
                 raise SyntaxError("Missing ';' after break")
             return BreakStatement()
+        elif tok.type == 'CONTINUE':
+            semi = self.lexer.token()
+            if not semi or semi.type != 'SEMI':
+                raise SyntaxError("Missing ';' after continue")
+            return ContinueStatement()
+
         else:
             raise KillaSyntaxError(f"Unexpected token in statement: {tok.type}")
 
@@ -792,8 +799,12 @@ class KillaInterpreter:
                     self.environment.assign(node.var_name, i)
                 else:
                     self.environment.define(node.var_name, i)
-                for stmt in node.body:
-                    self.execute(stmt)
+
+                try:
+                    for stmt in node.body:
+                        self.execute(stmt)
+                except ContinueException:
+                    continue
         elif isinstance(node, IfStatement):
             cond = self.evaluate_expr(node.condition)
             if cond:
@@ -807,8 +818,11 @@ class KillaInterpreter:
             return None
         elif isinstance(node, WhileStatement):
             while self.evaluate_expr(node.condition):
-                for stmt in node.body:
-                    self.execute(stmt)
+                try:
+                    for stmt in node.body:
+                        self.execute(stmt)
+                except ContinueException:
+                    continue
             return None
         elif isinstance(node, FunctionDeclaration):
             func = Function(
@@ -845,7 +859,9 @@ class KillaInterpreter:
                 except BreakException:
                     return None
             return None
-
+        # 在 execute 裡加入
+        elif isinstance(node, ContinueStatement):
+            raise ContinueException()
         else:
             raise KillaRuntimeError(f"Unknown AST node type: {type(node).__name__}")
 
