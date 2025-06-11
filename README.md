@@ -36,6 +36,12 @@ pip install ply
     if y > 15:
         😭("y is large");
   ```
+#### 附值
+```text
+🤕 a = 10;
+🤕 b = "123";
+```
+
 ### **2.支援基本函數**
 - 支援簡單的函數
 - 語法範例
@@ -72,11 +78,30 @@ if x and not y:
 
 🤐 i 🤫 🤣  1 6:
   sum 🥳 sum 🤌 i;
-  
+🥶
 😭(sum);
 
 ```
+#### break(for)
+```text
+🤕 sum 🥳 0;
 
+🤐 i 🤫 🤣  1 6:
+  sum 🥳 sum 🤌 i;
+  🫥;
+🥶
+😭(sum);
+```
+#### continue
+```text
+🤕 sum 🥳 0;
+
+🤐 i 🤫 🤣  1 6:
+    😶;
+    sum 🥳 sum 🤌 i;
+🥶
+😭(sum);
+```
 ### while loop
 ```text
 🤕 i 🥳 1;
@@ -85,9 +110,13 @@ if x and not y:
 😺 i <= 5:
     sum 🥳 sum 🤌 i;
     i 🥳 i 🤌 1;
-    😭😖sum😫;
+🥶
+😭(i);
 ```
-
+#### while break and continue
+```text
+same as for loop w:w
+```
 ### switch case
 ```text
 🤕 x 🥳 2;

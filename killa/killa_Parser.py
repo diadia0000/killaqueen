@@ -74,8 +74,11 @@ class UnaryExpression(ASTNode):
     def __init__(self, operator, operand):
         self.operator = operator
         self.operand = operand
+
+
 class BreakException(Exception):
     pass
+
 
 class ContinueException(Exception):
     pass
@@ -509,12 +512,10 @@ class KillaInterpreter:
     def parse_and_build_ast(self, code):
         self.lexer.input(code)
         statements = []
-
         while True:
             tok = self.lexer.token()
             if not tok:
                 break
-
             if tok.type == 'VAR':
                 statements.append(self._parse_var_declaration())
             elif tok.type == 'ID':
@@ -535,38 +536,40 @@ class KillaInterpreter:
                 statements.append(self._parse_while())
             elif tok.type == 'SWITCH':
                 statements.append(self._parse_switch())
+            elif tok.type == 'BREAK':
+                statements.append(self._parse_break())
             else:
                 raise KillaSyntaxError(f"Unknown token: {tok.type}")
-
         return Program(statements)
-
     def _parse_for(self):
         var_token = self.lexer.token()
         if var_token.type != 'ID':
             raise KillaSyntaxError("Expected loop variable after 'for'")
-
         in_token = self.lexer.token()
         if not in_token or in_token.type != 'IN':
             raise KillaSyntaxError("Expected 'in' after for variable")
-
         range_token = self.lexer.token()
         if not range_token or range_token.type != 'RANGE':
             raise KillaSyntaxError("Expected 'range' after 'in'")
-
         start_token = self.lexer.token()
         end_token = self.lexer.token()
-
         colon_token = self.lexer.token()
         if not colon_token or colon_token.type != 'COLON':
             raise KillaSyntaxError("Expected ':' after for loop range")
-
-        body_stmt = self._parse_statement()
-
+        # ✅ collect multi-line body
+        body = []
+        while self.lexer._tokens:
+            peek = self.lexer._tokens[0]
+            if peek.type == 'END':  # 🥶 表示區塊結尾
+                self.lexer.token()  # consume 'END'
+                break
+            stmt = self._parse_statement()
+            body.append(stmt)
         return ForStatement(
             var_name=var_token.value,
             start_expr=self._literal_to_ast(start_token),
             end_expr=self._literal_to_ast(end_token),
-            body=[body_stmt]
+            body=body
         )
 
     def _parse_while(self):
@@ -576,17 +579,15 @@ class KillaInterpreter:
         if not colon or colon.type != 'COLON':
             raise KillaSyntaxError("Expected ':' after while condition")
 
-        # 支援多行 body
+        # ✅ 改為吃到 END 為止
         body = []
-        while True:
-            if not self.lexer._tokens:
-                break
+        while self.lexer._tokens:
             peek = self.lexer._tokens[0]
-            if peek.type in ('VAR', 'PRINT', 'ID', 'IF', 'FOR', 'WHILE', 'FUNC', 'RETURN'):
-                stmt = self._parse_statement()
-                body.append(stmt)
-            else:
+            if peek.type == 'END':  # 🥶 結尾
+                self.lexer.token()  # consume 'END'
                 break
+            stmt = self._parse_statement()
+            body.append(stmt)
 
         return WhileStatement(condition, body)
 
@@ -622,6 +623,12 @@ class KillaInterpreter:
 
         else:
             raise KillaSyntaxError(f"Unexpected token in statement: {tok.type}")
+
+    def _parse_break(self):
+        semi = self.lexer.token()
+        if not semi or semi.type != 'SEMI':
+            raise SyntaxError("Missing ';' after break")
+        return BreakStatement()
 
     def _parse_assignment(self, id_token):
         eq_token = self.lexer.token()
@@ -793,16 +800,17 @@ class KillaInterpreter:
         elif isinstance(node, ForStatement):
             start = self.evaluate_expr(node.start_expr)
             end = self.evaluate_expr(node.end_expr)
-
             for i in range(start, end):
                 if node.var_name in self.environment.values:
                     self.environment.assign(node.var_name, i)
                 else:
                     self.environment.define(node.var_name, i)
-
                 try:
                     for stmt in node.body:
                         self.execute(stmt)
+                except BreakException:
+                    # print("✅ Break caught, exiting loop")
+                    break  # ✅ 正確中止這個 for 迴圈！
                 except ContinueException:
                     continue
         elif isinstance(node, IfStatement):
@@ -823,6 +831,9 @@ class KillaInterpreter:
                         self.execute(stmt)
                 except ContinueException:
                     continue
+                except BreakException:
+                    # print("✅ Break caught, exiting loop")
+                    break
             return None
         elif isinstance(node, FunctionDeclaration):
             func = Function(
@@ -838,6 +849,7 @@ class KillaInterpreter:
             raise KillaReturn(value)
         # 在 execute 裡加這段
         elif isinstance(node, BreakStatement):
+            # print("🚨 Break triggered!")
             raise BreakException()
         elif isinstance(node, SwitchStatement):
             switch_val = self.evaluate_expr(node.expr)
@@ -912,7 +924,13 @@ def run_ast(code):
     interp = KillaInterpreter()
     program = interp.parse_and_build_ast(code)
     for stmt in program.statements:
-        interp.execute(stmt)
+        try:
+            interp.execute(stmt)
+        except BreakException:
+            KillaRuntimeError("⚠️ Warning: 'brk' used outside of loop (ignored)")
+        except ContinueException:
+            KillaRuntimeError("⚠️ Warning: 'continue' used outside of loop (ignored)")
+
 
 
 if __name__ == '__main__':

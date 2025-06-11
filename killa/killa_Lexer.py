@@ -14,9 +14,9 @@ class Lexer:
         self.pos = 0
         self.text = ''
         self.reserved = {
-            'id': 'ID', 'if': 'IF', 'else': 'ELSE', 'brk': 'BREAK',
+            'id': 'ID', 'if': 'IF', 'else': 'ELSE',
             'switch': 'SWITCH','case': 'CASE', 'default': 'DEFAULT',
-            'and': 'AND', 'or': 'OR', 'not': 'NOT', 'continue':'CONTINUE'
+            'and': 'AND', 'or': 'OR', 'not': 'NOT'
         }
 
         self.token_spec = [
@@ -57,6 +57,8 @@ class Lexer:
             ('FOR', r'🤐'),
             ('IN', r'🤫'),
             ('RANGE', r'🤣'),
+            ('CONTINUE',r'😶'),
+            ('BREAK',r'🫥'),
             ('MISMATCH', r'.')
         ]
 
