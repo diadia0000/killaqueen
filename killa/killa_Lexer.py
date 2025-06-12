@@ -15,7 +15,6 @@ class Lexer:
         self.text = ''
         self.reserved = {
             'id': 'ID', 'if': 'IF', 'else': 'ELSE',
-            'switch': 'SWITCH','case': 'CASE', 'default': 'DEFAULT',
             'and': 'AND', 'or': 'OR', 'not': 'NOT'
         }
 
@@ -59,6 +58,9 @@ class Lexer:
             ('RANGE', r'🤣'),
             ('CONTINUE',r'😶'),
             ('BREAK',r'🫥'),
+            ('SWITCH',r'🤮'),
+            ('CASE',r'🤧'),
+            ('DEFAULT',r'😾'),
             ('MISMATCH', r'.')
         ]
 
